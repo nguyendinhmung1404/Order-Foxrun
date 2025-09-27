@@ -451,10 +451,11 @@ elif menu == "Nhắc nhở (Reminders)":
 # 5) Thống kê & Xuất
 elif menu == "📊 Thống kê & Xuất":
     st.header("📊 Thống kê & Xuất")
-    # Lấy dữ liệu (sử dụng hàm get_orders_df - đảm bảo hàm này tồn tại trong file)
     df = get_orders_df()
-    if df is None or df.empty:
+    st.write("🔎 Debug df:", df)    # ✅ THÊM DÒNG NÀY
+    if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
+        st.stop()
     else:
         # --- Chuẩn hóa ngày ---
         df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
