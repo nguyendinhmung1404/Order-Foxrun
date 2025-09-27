@@ -16,7 +16,6 @@ def format_df_for_display(df):
     if df is None or df.empty:
         return df
     df_display = df.copy()
-    # chuyển datetime sang string dễ đọc
     for col in df_display.columns:
         try:
             if str(df_display[col].dtype).startswith("datetime"):
@@ -29,7 +28,6 @@ def export_df_to_excel_bytes(df):
     """Xuất DataFrame thành file Excel bytes để tải về"""
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        # nếu df là None hoặc empty -> tạo dataframe rỗng
         if df is None:
             pd.DataFrame().to_excel(writer, index=False, sheet_name="Orders")
         else:
@@ -43,41 +41,23 @@ except Exception as e:
     raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
 # -------------------------
-# Cấu hình Supabase (ưu tiên st.secrets)
+# Cấu hình Supabase
 # -------------------------
-SUPABASE_URL = None
-SUPABASE_KEY = None
-if hasattr(st, "secrets"):
-    SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
-
-if not SUPABASE_URL:
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-if not SUPABASE_KEY:
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-# Debug (chỉ hiển thị True/False, không in key)
-st.write("DEBUG: SUPABASE_URL present?", bool(SUPABASE_URL))
-st.write("DEBUG: SUPABASE_KEY present?", bool(SUPABASE_KEY))
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL"))
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError(
-        "Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY trong Streamlit Secrets hoặc biến môi trường."
-    )
+    raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY.")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# -------------------------
-# Cấu hình chung
-# -------------------------
 DB_TABLE = "orders"
 REMINDER_DAYS = [9, 7, 5, 3]
 
 # -------------------------
-# Database helpers (Supabase) - tất cả có try/except
+# Database helpers
 # -------------------------
 def row_to_df(records):
-    """Convert list of dicts from supabase to pandas DataFrame (with proper dtypes)."""
     if not records:
         return pd.DataFrame()
     df = pd.DataFrame(records)
@@ -87,34 +67,30 @@ def row_to_df(records):
     return df
 
 def get_orders_df():
-    """Fetch all orders from Supabase, return DataFrame."""
     try:
         res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
-        # res.data expected to be list of dicts
         return row_to_df(res.data)
     except Exception as e:
-        st.error(f"Lỗi khi lấy danh sách đơn từ Supabase: {e}")
+        st.error(f"Lỗi khi lấy danh sách đơn: {e}")
         return pd.DataFrame()
 
-# alias (nhiều chỗ gọi load_orders)
 def load_orders():
     return get_orders_df()
 
 def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", package_info=""):
-    """Insert a new order into Supabase table."""
     try:
         expected = None
         if start_date_str:
             try:
                 expected = (datetime.strptime(start_date_str, "%Y-%m-%d") + timedelta(days=int(lead_time_int))).date().isoformat()
-            except Exception:
+            except:
                 expected = None
         created = datetime.utcnow().isoformat()
         payload = {
             "order_code": order_code,
             "name": name,
             "start_date": start_date_str,
-            "lead_time": int(lead_time_int) if lead_time_int is not None else None,
+            "lead_time": int(lead_time_int) if lead_time_int else None,
             "expected_date": expected,
             "delivered_date": None,
             "status": "Đang sản xuất",
@@ -123,68 +99,58 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
             "package_info": package_info,
         }
         res = supabase.table(DB_TABLE).insert(payload).execute()
-        # nếu không exception => chấp nhận thành công
         return res.data
     except Exception as e:
-        raise RuntimeError(f"Supabase insert error: {e}")
+        raise RuntimeError(f"Lỗi insert: {e}")
 
 def update_order_db(order_id, order_code, name, start_date_str, lead_time_int, notes, package_info=""):
-    """Update an order by id."""
     try:
         expected = None
         if start_date_str:
             try:
                 expected = (datetime.strptime(start_date_str, "%Y-%m-%d") + timedelta(days=int(lead_time_int))).date().isoformat()
-            except Exception:
+            except:
                 expected = None
         payload = {
             "order_code": order_code,
             "name": name,
             "start_date": start_date_str,
-            "lead_time": int(lead_time_int) if lead_time_int is not None else None,
+            "lead_time": int(lead_time_int) if lead_time_int else None,
             "expected_date": expected,
             "notes": notes,
-            "package_info": package_info
+            "package_info": package_info,
         }
         res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
         return res.data
     except Exception as e:
-        raise RuntimeError(f"Supabase update error: {e}")
+        raise RuntimeError(f"Lỗi update: {e}")
 
 def delete_order_db(order_id):
     try:
         res = supabase.table(DB_TABLE).delete().eq("id", int(order_id)).execute()
         return res.data
     except Exception as e:
-        raise RuntimeError(f"Supabase delete error: {e}")
+        raise RuntimeError(f"Lỗi delete: {e}")
 
 def mark_delivered_db(order_id, delivered_date_str):
-    """Mark delivered and compute status based on expected_date."""
     try:
         r = supabase.table(DB_TABLE).select("expected_date").eq("id", int(order_id)).single().execute()
         if not r.data or r.data.get("expected_date") is None:
-            return False, "Không tìm thấy ngày dự kiến để so sánh."
-        expected = None
-        try:
-            expected = pd.to_datetime(r.data.get("expected_date")).date()
-        except Exception:
-            return False, "Sai định dạng ngày dự kiến."
-        try:
-            delivered = datetime.strptime(delivered_date_str, "%Y-%m-%d").date()
-        except Exception:
-            return False, "Sai định dạng ngày (phải YYYY-MM-DD)."
+            return False, "Không tìm thấy ngày dự kiến."
+        expected = pd.to_datetime(r.data.get("expected_date")).date()
+        delivered = datetime.strptime(delivered_date_str, "%Y-%m-%d").date()
         delta = (delivered - expected).days
         if delta == 0:
             status = "✅ Đã giao đúng hẹn"
         elif delta > 0:
-            status = f"🚨 Đã giao trễ {delta} ngày"
+            status = f"🚨 Trễ {delta} ngày"
         else:
-            status = f"⏱️ Đã giao sớm {-delta} ngày"
+            status = f"⏱️ Sớm {-delta} ngày"
         payload = {"delivered_date": delivered_date_str, "status": status}
-        res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
+        supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
         return True, status
     except Exception as e:
-        return False, f"Lỗi khi đánh dấu giao: {e}"
+        return False, f"Lỗi mark delivered: {e}"
 
 # -------------------------
 # Reminders
@@ -195,31 +161,27 @@ def build_reminders():
     msgs = []
     if df.empty:
         return msgs
-    # đảm bảo expected_date / delivered_date là datetime
-    if "expected_date" in df.columns:
-        df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
-    if "delivered_date" in df.columns:
-        df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
-    df_pending = df[df["delivered_date"].isna()] if "delivered_date" in df.columns else df
+    df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
+    df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
+    df_pending = df[df["delivered_date"].isna()]
     for _, row in df_pending.iterrows():
-        exp = row.get("expected_date")
-        if pd.isna(exp):
+        expected = pd.to_datetime(row["expected_date"]).date() if not pd.isna(row["expected_date"]) else None
+        if not expected:
             continue
-        expected = pd.to_datetime(exp).date()
         days_left = (expected - today).days
         if days_left < 0:
-            msgs.append(f"⚠️ [TRỄ] {row.get('name')} (ID:{row.get('id')}) đã trễ {-days_left} ngày (dự kiến {expected})")
+            msgs.append(f"⚠️ Trễ {-days_left} ngày: {row['name']} (ID:{row['id']})")
         elif days_left == 0:
-            msgs.append(f"🚨 [HÔM NAY] {row.get('name')} (ID:{row.get('id')}) đến hạn hôm nay ({expected})")
+            msgs.append(f"🚨 Hôm nay đến hạn: {row['name']} (ID:{row['id']})")
         elif days_left in REMINDER_DAYS:
-            msgs.append(f"🔔 [SẮP ĐẾN HẠN - {days_left} ngày] {row.get('name')} (ID:{row.get('id')}) dự kiến {expected}")
+            msgs.append(f"🔔 Còn {days_left} ngày: {row['name']} (ID:{row['id']})")
     return msgs
 
 # -------------------------
-# Streamlit UI
+# UI
 # -------------------------
-st.set_page_config(page_title="Quản lý Đơn hàng - Supabase", layout="wide")
-st.title("📦 Quản lý Đơn hàng (Supabase) — có Nhắc (3/5/7/9 ngày)")
+st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
+st.title("📦 Quản lý Đơn hàng Foxrun")
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
@@ -229,41 +191,47 @@ menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thống kê & Xuất"
 ])
 
+# --- Flash message placeholder ---
+flash = st.empty()
+if "flash_msg" in st.session_state:
+    msg, level = st.session_state.pop("flash_msg")
+    if level == "success":
+        flash.success(msg)
+    elif level == "error":
+        flash.error(msg)
+    elif level == "warning":
+        flash.warning(msg)
+    else:
+        flash.info(msg)
+
 # 1) Thêm đơn mới
 if menu == "Thêm đơn mới":
     st.header("➕ Thêm đơn mới")
     with st.form("form_add"):
         col1, col2 = st.columns(2)
         with col1:
-            customer_name = st.text_input("Tên khách hàng", max_chars=100)
-            product_name = st.text_input("Tên sản phẩm", max_chars=150)
-            quantity = st.number_input("Số lượng", min_value=1, value=1, step=1)
-            price_cny = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=0.0, format="%.4f")
-            package_info = st.text_input("Kích thước / Cân nặng / Số kiện (nhà máy báo)", max_chars=200)
+            customer_name = st.text_input("Tên khách hàng")
+            product_name = st.text_input("Tên sản phẩm")
+            package_info = st.text_input("Kích thước / Cân nặng / Số kiện")
         with col2:
-            start_date = st.date_input("Ngày bắt đầu (xưởng bắt tay làm)", value=date.today())
-            first_payment_date = st.date_input("Ngày thanh toán lần đầu (nếu có)", value=None)
+            start_date = st.date_input("Ngày bắt đầu", value=date.today())
             production_days = st.number_input("Số ngày sản xuất", min_value=0, value=30, step=1)
             notes = st.text_area("Ghi chú", height=80)
-
         submitted = st.form_submit_button("Lưu đơn hàng")
         if submitted:
             if not customer_name or not product_name:
-                st.error("Vui lòng nhập tên khách hàng và tên sản phẩm.")
-            else:
-                start_str = start_date.strftime("%Y-%m-%d") if start_date else None
-                order_code = f"OD{int(datetime.utcnow().timestamp())}"
-                try:
-                    add_order_db(order_code, f"{customer_name} - {product_name}", start_str, production_days, notes, package_info)
-                    expected = None
-                    try:
-                        expected = (datetime.strptime(start_str, "%Y-%m-%d") + timedelta(days=int(production_days))).strftime("%Y-%m-%d")
-                    except Exception:
-                        expected = ""
-                    st.toast(f"✅ Đã lưu đơn {order_code}. Ngày dự kiến: {expected}", icon="🎉")
-                    st.rerun()
-                except Exception as e:
-                    st.toast(f"❌ Lỗi khi lưu đơn: {e}", icon="⚠️")
+                st.session_state["flash_msg"] = ("❌ Nhập thiếu tên khách / sản phẩm.", "error")
+                st.rerun()
+            order_code = f"OD{int(datetime.utcnow().timestamp())}"
+            try:
+                add_order_db(order_code, f"{customer_name} - {product_name}",
+                             start_date.strftime("%Y-%m-%d"), production_days, notes, package_info)
+                expected = (start_date + timedelta(days=production_days)).strftime("%Y-%m-%d")
+                st.session_state["flash_msg"] = (f"✅ Đã lưu đơn {order_code}. Dự kiến: {expected}", "success")
+                st.rerun()
+            except Exception as e:
+                st.session_state["flash_msg"] = (f"❌ Lỗi lưu: {e}", "error")
+                st.rerun()
 
 # 2) Danh sách & Quản lý
 elif menu == "Danh sách & Quản lý":
@@ -272,6 +240,7 @@ elif menu == "Danh sách & Quản lý":
     if df.empty:
         st.info("Chưa có đơn hàng.")
     else:
+        # ensure expected_date is datetime
         if "expected_date" in df.columns:
             df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
         col1, col2 = st.columns(2)
@@ -279,23 +248,19 @@ elif menu == "Danh sách & Quản lý":
             start_filter = st.date_input("Lọc từ ngày dự kiến (từ)", value=(date.today() - timedelta(days=30)))
         with col2:
             end_filter = st.date_input("Lọc đến ngày dự kiến (đến)", value=(date.today() + timedelta(days=30)))
-        # an toàn nếu expected_date bị thiếu
-        if "expected_date" in df.columns:
-            mask = (df['expected_date'].dt.date >= start_filter) & (df['expected_date'].dt.date <= end_filter)
-            filtered = df[mask].copy()
-        else:
-            filtered = df.copy()
+        mask = (df['expected_date'].dt.date >= start_filter) & (df['expected_date'].dt.date <= end_filter)
+        filtered = df[mask].copy()
 
-        all_status = filtered['status'].fillna("Chưa xác định").unique().tolist() if "status" in filtered.columns else ["Tất cả"]
+        all_status = filtered['status'].fillna("Chưa xác định").unique().tolist()
         chosen = st.multiselect("Lọc theo trạng thái", options=all_status, default=all_status)
-        if "status" in filtered.columns:
-            filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
+        filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
+
         display = format_df_for_display(filtered)
         show_cols = ["id","order_code","name","start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
         show_cols = [c for c in show_cols if c in display.columns]
         st.dataframe(display[show_cols], use_container_width=True)
 
-        opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()] if not filtered.empty else []
+        opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
         if opts:
             sel = st.selectbox("Chọn đơn để Sửa / Xóa", options=opts)
             sel_id = int(sel.split(" - ")[0])
@@ -327,18 +292,20 @@ elif menu == "Danh sách & Quản lý":
                         (new_notes or "").strip(),
                         (new_package or "").strip()
                     )
-                    st.success("✅ Đã cập nhật đơn.")
+                    st.session_state["flash_msg"] = ("✅ Đã cập nhật đơn.", "success")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Lỗi khi cập nhật: {e}")
+                    st.session_state["flash_msg"] = (f"❌ Lỗi khi cập nhật: {e}", "error")
+                    st.rerun()
 
             if st.button("❌ Xóa đơn này"):
                 try:
                     delete_order_db(sel_id)
-                    st.warning("🗑️ Đã xóa đơn.")
+                    st.session_state["flash_msg"] = ("🗑️ Đã xóa đơn.", "warning")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Lỗi khi xóa: {e}")
+                    st.session_state["flash_msg"] = (f"❌ Lỗi khi xóa: {e}", "error")
+                    st.rerun()
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
