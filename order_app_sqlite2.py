@@ -449,9 +449,9 @@ elif menu == "Nhắc nhở (Reminders)":
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # 5) Thống kê & Xuất
-elif menu == "📊 Thống kê & Xuất":
-    st.header("📊 Thống kê & Xuất dữ liệu")
-    df = load_orders()
+elif menu == "Thống kê & Xuất":
+    st.header("📊 Thống kê tổng quan")
+    df = get_orders_df()
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
