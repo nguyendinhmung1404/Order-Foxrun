@@ -281,31 +281,28 @@ elif menu == "Danh sách & Quản lý":
                 new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)", sel_row.get("package_info","") or "")
                 save = st.form_submit_button("Lưu thay đổi")
 
-            if save:
-                try:
-                    update_order_db(
-                        sel_id,
-                        (new_code or "").strip(),
-                        (new_name or "").strip(),
-                        new_start.strftime("%Y-%m-%d"),
-                        int(new_lead),
-                        (new_notes or "").strip(),
-                        (new_package or "").strip()
-                    )
-                    st.session_state["flash_msg"] = ("✅ Đã cập nhật đơn.", "success")
-                    st.rerun()
-                except Exception as e:
-                    st.session_state["flash_msg"] = (f"❌ Lỗi khi cập nhật: {e}", "error")
-                    st.rerun()
+                if save:
+                    try:
+                        update_order_db(
+                            sel_id,
+                            (new_code or "").strip(),
+                            (new_name or "").strip(),
+                            new_start.strftime("%Y-%m-%d"),
+                            int(new_lead),
+                            (new_notes or "").strip(),
+                            (new_package or "").strip()
+                        )
+                        st.success("✅ Đã cập nhật đơn.")   # hiện ngay dưới nút
+                    except Exception as e:
+                        st.error(f"❌ Lỗi khi cập nhật: {e}")  # hiện ngay dưới nút
 
+            st.subheader("🗑️ Xóa đơn")
             if st.button("❌ Xóa đơn này"):
                 try:
                     delete_order_db(sel_id)
-                    st.session_state["flash_msg"] = ("🗑️ Đã xóa đơn.", "warning")
-                    st.rerun()
+                    st.success("🗑️ Đã xóa đơn.")   # hiện ngay dưới nút
                 except Exception as e:
-                    st.session_state["flash_msg"] = (f"❌ Lỗi khi xóa: {e}", "error")
-                    st.rerun()
+                    st.error(f"❌ Lỗi khi xóa: {e}")  # hiện ngay dưới nút
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
