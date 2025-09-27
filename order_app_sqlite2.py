@@ -449,13 +449,12 @@ elif menu == "Nhắc nhở (Reminders)":
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # 5) Thống kê & Xuất
-elif menu == "Thống kê & Xuất":
-    st.header("📊 Thống kê tổng quan")
-    df = get_orders_df()
+elif menu == "📊 Thống kê & Xuất":
+    st.header("📊 Thống kê & Xuất")
+    df = get_all_orders_df()
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
-                # Bảo vệ dữ liệu ngày
         df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
         df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
 
@@ -473,23 +472,30 @@ elif menu == "Thống kê & Xuất":
                     return "Trễ"
                 else:
                     return "Sớm"
-
         df["delivery_status"] = df.apply(classify, axis=1)
 
-        # ✅ Đếm số lượng từng loại
-        stats = df["delivery_status"].value_counts()
+        # ✅ 🟢 THỐNG KÊ TỔNG QUAN
+        tong_don = len(df)
+        dang_sx = (df["status"] == "Đang sản xuất").sum()
+        giao_tre = (df["delivery_status"] == "Trễ").sum()
+        giao_som = (df["delivery_status"] == "Sớm").sum()
+        dung_hen = (df["delivery_status"] == "Đúng hẹn").sum()
 
-        # Vẽ biểu đồ tròn
-        st.subheader("Tỉ lệ giao hàng")
+        st.subheader("📊 Thống kê tổng quan")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Tổng đơn", tong_don)
+        col2.metric("Đang sản xuất", dang_sx)
+        col3.metric("Đơn trễ", giao_tre)
+        col4.metric("Đơn sớm", giao_som)
+        col5.metric("Đúng hẹn", dung_hen)
+
+        # ✅ Vẽ biểu đồ tròn
         import matplotlib.pyplot as plt
+        stats = df["delivery_status"].value_counts()
         fig, ax = plt.subplots()
-        ax.pie(
-            stats.values,
-            labels=stats.index,
-            autopct="%.1f%%",
-            startangle=90
-        )
-        ax.axis("equal")  # Giúp hình tròn cân đối
+        ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
+        ax.axis("equal")
+        st.subheader("Tỉ lệ giao hàng")
         st.pyplot(fig)
 
         # Hiển thị chi tiết và xuất
