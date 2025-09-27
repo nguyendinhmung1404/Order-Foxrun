@@ -180,7 +180,7 @@ def mark_delivered_db(order_id, delivered_date_str):
         return False, f"Lỗi mark delivered: {e}"
 
 # -------------------------
-# Reminders (đã chỉnh sửa)
+# Reminders ( chính xác tính ngày)
 # -------------------------
 def build_reminders():
     """
@@ -191,29 +191,57 @@ def build_reminders():
     df = get_orders_df()
     today = date.today()
     msgs = []
-    if df.empty:
+    if df is None or df.empty:
         return msgs
-    df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
-    df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
-    df_pending = df[df["delivered_date"].isna()]
+
+    # parse expected/delivered thành Timestamp (coerce errors)
+    df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
+    df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
+
+    # helper: chuyển 1 Timestamp (có thể tz-aware hoặc naive) -> python.date (strip tz + time)
+    def _to_date_only(ts):
+        if pd.isna(ts):
+            return None
+        try:
+            ts = pd.Timestamp(ts)
+            # nếu tz-aware, convert/remove tz
+            if ts.tzinfo is not None or getattr(ts, "tz", None) is not None:
+                try:
+                    ts = ts.tz_convert(None)
+                except Exception:
+                    try:
+                        ts = ts.tz_localize(None)
+                    except Exception:
+                        pass
+            # normalize -> midnight then .date()
+            return ts.normalize().date()
+        except Exception:
+            try:
+                return pd.to_datetime(ts).date()
+            except Exception:
+                return None
+
+    # tạo cột date-only để so sánh chính xác
+    df["expected_date_only"] = df["expected_date"].apply(_to_date_only)
+    df["delivered_date_only"] = df["delivered_date"].apply(_to_date_only)
+
+    # lọc các đơn chưa xác nhận giao
+    df_pending = df[df["delivered_date_only"].isna()]
+
     for _, row in df_pending.iterrows():
-        if pd.isna(row["expected_date"]):
+        exp_date = row.get("expected_date_only")
+        if not exp_date:
             continue
-        expected = row["expected_date"].date()
-        days_left = (expected - today).days
+        days_left = (exp_date - today).days
+
         if days_left < 0:
-            msgs.append(
-                f"⚠️ Đơn **{row['name']}** (ID:{row['id']}) đã trễ **{-days_left} ngày** so với hẹn {expected}"
-            )
-        elif 0 <= days_left <= REMINDER_RANGE:
-            if days_left == 0:
-                msgs.append(
-                    f"🚨 Hôm nay đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
-            else:
-                msgs.append(
-                    f"🔔 Còn **{days_left} ngày** đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
+            msgs.append(f"⚠️ Đơn **{row.get('name')}** (ID:{row.get('id')}) đã trễ **{-days_left} ngày** — dự kiến: {exp_date}")
+        elif days_left == 0:
+            msgs.append(f"🚨 Đơn **{row.get('name')}** (ID:{row.get('id')}) đến hạn **HÔM NAY** ({exp_date})")
+        elif 0 < days_left <= 7:
+            msgs.append(f"🔔 Còn **{days_left} ngày** đến hạn đơn **{row.get('name')}** (ID:{row.get('id')}) — dự kiến: {exp_date}")
+        # nếu >7 ngày thì không nhắc
+
     return msgs
 
 # -------------------------
