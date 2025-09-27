@@ -77,31 +77,81 @@ def get_orders_df():
 def load_orders():
     return get_orders_df()
 
-def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", package_info=""):
+def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", package_info="",
+                 quantity=1, price_cny=0.0, deposit_amount=0.0):
+    """Insert a new order into Supabase table."""
     try:
+        # Tính toán
+        total_cny = float(price_cny) * int(quantity)
+        deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
+
         expected = None
         if start_date_str:
             try:
-                expected = (datetime.strptime(start_date_str, "%Y-%m-%d") + timedelta(days=int(lead_time_int))).date().isoformat()
-            except:
+                expected = (datetime.strptime(start_date_str, "%Y-%m-%d") +
+                            timedelta(days=int(lead_time_int))).date().isoformat()
+            except Exception:
                 expected = None
+
         created = datetime.utcnow().isoformat()
         payload = {
             "order_code": order_code,
             "name": name,
             "start_date": start_date_str,
-            "lead_time": int(lead_time_int) if lead_time_int else None,
+            "lead_time": int(lead_time_int) if lead_time_int is not None else None,
             "expected_date": expected,
             "delivered_date": None,
             "status": "Đang sản xuất",
             "notes": notes,
             "created_at": created,
             "package_info": package_info,
+            "quantity": int(quantity),
+            "price_cny": float(price_cny),
+            "total_cny": total_cny,
+            "deposit_amount": float(deposit_amount),
+            "deposit_ratio": deposit_ratio
         }
         res = supabase.table(DB_TABLE).insert(payload).execute()
         return res.data
     except Exception as e:
-        raise RuntimeError(f"Lỗi insert: {e}")
+        raise RuntimeError(f"Supabase insert error: {e}")
+
+
+def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
+                    notes, package_info="",
+                    quantity=1, price_cny=0.0, deposit_amount=0.0):
+    """Update an order by id."""
+    try:
+        # Tính toán
+        total_cny = float(price_cny) * int(quantity)
+        deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
+
+        expected = None
+        if start_date_str:
+            try:
+                expected = (datetime.strptime(start_date_str, "%Y-%m-%d") +
+                            timedelta(days=int(lead_time_int))).date().isoformat()
+            except Exception:
+                expected = None
+
+        payload = {
+            "order_code": order_code,
+            "name": name,
+            "start_date": start_date_str,
+            "lead_time": int(lead_time_int) if lead_time_int is not None else None,
+            "expected_date": expected,
+            "notes": notes,
+            "package_info": package_info,
+            "quantity": int(quantity),
+            "price_cny": float(price_cny),
+            "total_cny": total_cny,
+            "deposit_amount": float(deposit_amount),
+            "deposit_ratio": deposit_ratio
+        }
+        res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
+        return res.data
+    except Exception as e:
+        raise RuntimeError(f"Supabase update error: {e}")
 
 def update_order_db(order_id, order_code, name, start_date_str, lead_time_int, notes, package_info=""):
     try:
@@ -210,28 +260,45 @@ if menu == "Thêm đơn mới":
     with st.form("form_add"):
         col1, col2 = st.columns(2)
         with col1:
-            customer_name = st.text_input("Tên khách hàng")
-            product_name = st.text_input("Tên sản phẩm")
-            package_info = st.text_input("Kích thước / Cân nặng / Số kiện")
+            customer_name = st.text_input("Tên khách hàng", max_chars=100)
+            product_name = st.text_input("Tên sản phẩm", max_chars=150)
+            quantity = st.number_input("Số lượng", min_value=1, value=1, step=1)
+            price_cny = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=0.0, format="%.2f")
+            deposit_amount = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=0.0, format="%.2f")
+            package_info = st.text_input("Kích thước / Cân nặng / Số kiện (nhà máy báo)", max_chars=200)
         with col2:
-            start_date = st.date_input("Ngày bắt đầu", value=date.today())
+            start_date = st.date_input("Ngày bắt đầu (xưởng bắt tay làm)", value=date.today())
+            first_payment_date = st.date_input("Ngày thanh toán lần đầu (nếu có)", value=None)
             production_days = st.number_input("Số ngày sản xuất", min_value=0, value=30, step=1)
             notes = st.text_area("Ghi chú", height=80)
+
+        # Tính toán hiển thị
+        total_cny = price_cny * quantity
+        deposit_ratio = (deposit_amount / total_cny * 100) if total_cny > 0 else 0
+        st.markdown(f"**💰 Tổng tiền (CNY):** {total_cny:.2f}")
+        st.markdown(f"**📊 Tỷ lệ đặt cọc:** {deposit_ratio:.1f}%")
+
         submitted = st.form_submit_button("Lưu đơn hàng")
         if submitted:
             if not customer_name or not product_name:
-                st.session_state["flash_msg"] = ("❌ Nhập thiếu tên khách / sản phẩm.", "error")
-                st.rerun()
-            order_code = f"OD{int(datetime.utcnow().timestamp())}"
-            try:
-                add_order_db(order_code, f"{customer_name} - {product_name}",
-                             start_date.strftime("%Y-%m-%d"), production_days, notes, package_info)
-                expected = (start_date + timedelta(days=production_days)).strftime("%Y-%m-%d")
-                st.session_state["flash_msg"] = (f"✅ Đã lưu đơn {order_code}. Dự kiến: {expected}", "success")
-                st.rerun()
-            except Exception as e:
-                st.session_state["flash_msg"] = (f"❌ Lỗi lưu: {e}", "error")
-                st.rerun()
+                st.error("❌ Vui lòng nhập tên khách hàng và tên sản phẩm.")
+            else:
+                start_str = start_date.strftime("%Y-%m-%d") if start_date else None
+                order_code = f"OD{int(datetime.utcnow().timestamp())}"
+                try:
+                    add_order_db(order_code, f"{customer_name} - {product_name}", start_str,
+                                 production_days, notes, package_info,
+                                 quantity, price_cny, deposit_amount)
+                    expected = ""
+                    try:
+                        expected = (datetime.strptime(start_str, "%Y-%m-%d") +
+                                    timedelta(days=int(production_days))).strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
+                    st.success(f"✅ Đã lưu đơn {order_code}. Ngày dự kiến: {expected}")
+                except Exception as e:
+                    st.error(f"❌ Lỗi khi lưu đơn: {e}")
+
 
 # 2) Danh sách & Quản lý
 elif menu == "Danh sách & Quản lý":
@@ -240,7 +307,6 @@ elif menu == "Danh sách & Quản lý":
     if df.empty:
         st.info("Chưa có đơn hàng.")
     else:
-        # ensure expected_date is datetime
         if "expected_date" in df.columns:
             df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
         col1, col2 = st.columns(2)
@@ -256,7 +322,8 @@ elif menu == "Danh sách & Quản lý":
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
 
         display = format_df_for_display(filtered)
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
+        show_cols = ["id","order_code","name","quantity","price_cny","total_cny","deposit_amount","deposit_ratio",
+                     "start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
         show_cols = [c for c in show_cols if c in display.columns]
         st.dataframe(display[show_cols], use_container_width=True)
 
@@ -277,6 +344,9 @@ elif menu == "Danh sách & Quản lý":
                     start_default = date.today()
                 new_start = st.date_input("Ngày bắt đầu", start_default)
                 new_lead = st.number_input("Số ngày sản xuất", min_value=0, value=int(sel_row.get("lead_time") or 0), step=1)
+                new_quantity = st.number_input("Số lượng", min_value=1, value=int(sel_row.get("quantity") or 1), step=1)
+                new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
+                new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=float(sel_row.get("deposit_amount") or 0.0), format="%.2f")
                 new_notes = st.text_area("Ghi chú", sel_row.get("notes","") or "")
                 new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)", sel_row.get("package_info","") or "")
                 save = st.form_submit_button("Lưu thay đổi")
@@ -290,19 +360,21 @@ elif menu == "Danh sách & Quản lý":
                             new_start.strftime("%Y-%m-%d"),
                             int(new_lead),
                             (new_notes or "").strip(),
-                            (new_package or "").strip()
+                            (new_package or "").strip(),
+                            new_quantity, new_price, new_deposit
                         )
-                        st.success("✅ Đã cập nhật đơn.")   # hiện ngay dưới nút
+                        st.success("✅ Đã cập nhật đơn.")
                     except Exception as e:
-                        st.error(f"❌ Lỗi khi cập nhật: {e}")  # hiện ngay dưới nút
+                        st.error(f"❌ Lỗi khi cập nhật: {e}")
 
             st.subheader("🗑️ Xóa đơn")
             if st.button("❌ Xóa đơn này"):
                 try:
                     delete_order_db(sel_id)
-                    st.success("🗑️ Đã xóa đơn.")   # hiện ngay dưới nút
+                    st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
-                    st.error(f"❌ Lỗi khi xóa: {e}")  # hiện ngay dưới nút
+                    st.error(f"❌ Lỗi khi xóa: {e}")
+
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
