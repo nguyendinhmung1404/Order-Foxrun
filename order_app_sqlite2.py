@@ -367,8 +367,8 @@ elif menu == "Danh sách & Quản lý":
                 new_start = st.date_input("Ngày bắt đầu", start_default)
                 new_lead = st.number_input("Số ngày sản xuất", min_value=0,
                                            value=int(sel_row.get("lead_time") or 0), step=1)
-                new_quantity = st.number_input("Số lượng", min_value=1,
-                                               value=float(sel_row.get("quantity") or 1), step=0.1, format="%.2f")
+                new_quantity = st.number_input("Số lượng", min_value=1.0,
+                                               value=float(sel_row.get("quantity") or 1.0), step=0.1, format="%.2f")
                 new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0,
                                             value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
                 new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0,
@@ -401,7 +401,8 @@ elif menu == "Danh sách & Quản lý":
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
-
+else:
+    st.info("Không có đơn để sửa hoặc xóa.")
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
