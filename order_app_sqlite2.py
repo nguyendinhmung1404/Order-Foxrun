@@ -7,6 +7,31 @@ import matplotlib.pyplot as plt
 from datetime import datetime, date, timedelta
 from io import BytesIO
 import os
+# -------------------------
+# Helpers
+# -------------------------
+def format_df_for_display(df):
+    """Chuẩn hóa DataFrame để hiển thị trên Streamlit"""
+    if df is None or df.empty:
+        return df
+    df_display = df.copy()
+    # chuyển datetime sang string dễ đọc
+    for col in df_display.columns:
+        if str(df_display[col].dtype).startswith("datetime"):
+            df_display[col] = df_display[col].dt.strftime("%Y-%m-%d")
+    return df_display
+
+def export_df_to_excel_bytes(df):
+    """Xuất DataFrame thành file Excel bytes để tải về"""
+    from io import BytesIO
+    import pandas as pd
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Orders")
+        writer.close()
+    processed_data = output.getvalue()
+    return processed_data
 
 # supabase client
 try:
