@@ -1,8 +1,7 @@
 streamlit
 pandas
-numpy
 matplotlib
-reportlab
 openpyxl
-
+supabase
+python-dotenv
 
