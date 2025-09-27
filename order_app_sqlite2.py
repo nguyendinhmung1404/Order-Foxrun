@@ -29,7 +29,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 st.write("DEBUG secrets:", list(st.secrets.keys()))
 
-    raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY dưới streamlit secrets hoặc biến môi trường.")
+raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY dưới streamlit secrets hoặc biến môi trường.")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
