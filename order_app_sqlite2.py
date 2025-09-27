@@ -9,43 +9,42 @@ from io import BytesIO
 import os
 
 # -------------------------
-# Helpers (export / format)
+# Helpers
 # -------------------------
-def export_df_to_excel_bytes(df: pd.DataFrame) -> bytes:
-    """Xuất DataFrame thành file Excel bytes để tải về."""
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="orders")
-    return output.getvalue()
-
-def format_df_for_display(df: pd.DataFrame) -> pd.DataFrame:
-    """Chuẩn hóa DataFrame để hiển thị trên Streamlit (định dạng ngày)."""
+def format_df_for_display(df):
+    """Chuẩn hóa DataFrame để hiển thị trên Streamlit"""
     if df is None or df.empty:
         return df
-    out = df.copy()
-    for c in ["start_date", "expected_date", "delivered_date", "created_at"]:
-        if c in out.columns:
-            out[c] = pd.to_datetime(out[c], errors="coerce").dt.strftime("%Y-%m-%d")
-    # tính delta_days nếu có delivered_date và expected_date
-    def compute_delta(r):
-        if pd.isna(r.get("delivered_date")) or pd.isna(r.get("expected_date")):
-            return ""
+    df_display = df.copy()
+    # chuyển datetime sang string dễ đọc
+    for col in df_display.columns:
         try:
-            return (pd.to_datetime(r["delivered_date"]).date() - pd.to_datetime(r["expected_date"]).date()).days
+            if str(df_display[col].dtype).startswith("datetime"):
+                df_display[col] = df_display[col].dt.strftime("%Y-%m-%d")
         except Exception:
-            return ""
-    out["delta_days"] = out.apply(compute_delta, axis=1)
-    return out
+            pass
+    return df_display
 
-# -------------------------
-# Supabase client
-# -------------------------
+def export_df_to_excel_bytes(df):
+    """Xuất DataFrame thành file Excel bytes để tải về"""
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # nếu df là None hoặc empty -> tạo dataframe rỗng
+        if df is None:
+            pd.DataFrame().to_excel(writer, index=False, sheet_name="Orders")
+        else:
+            df.to_excel(writer, index=False, sheet_name="Orders")
+    return output.getvalue()
+
+# supabase client
 try:
     from supabase import create_client
 except Exception as e:
     raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
-# Cấu hình Supabase: ưu tiên Streamlit secrets, fallback biến môi trường
+# -------------------------
+# Cấu hình Supabase (ưu tiên st.secrets)
+# -------------------------
 SUPABASE_URL = None
 SUPABASE_KEY = None
 if hasattr(st, "secrets"):
