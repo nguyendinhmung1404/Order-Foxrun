@@ -260,10 +260,10 @@ if menu == "Thêm đơn mới":
                         expected = (datetime.strptime(start_str, "%Y-%m-%d") + timedelta(days=int(production_days))).strftime("%Y-%m-%d")
                     except Exception:
                         expected = ""
-                    st.success(f"Đã lưu đơn {order_code}. Ngày dự kiến: {expected}")
+                    st.toast(f"✅ Đã lưu đơn {order_code}. Ngày dự kiến: {expected}", icon="🎉")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Lỗi khi lưu đơn: {e}")
+                    st.toast(f"❌ Lỗi khi lưu đơn: {e}", icon="⚠️")
 
 # 2) Danh sách & Quản lý
 elif menu == "Danh sách & Quản lý":
