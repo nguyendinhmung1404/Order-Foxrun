@@ -295,12 +295,13 @@ elif menu == "Danh sách & Quản lý":
                     st.session_state["flash_msg"] = ("✅ Đã cập nhật đơn.", "success")
                     st.rerun()
                 except Exception as e:
+                    st.session_state["flash_msg"] = (f"❌ Lỗi khi cập nhật: {e}", "error")
+                    st.rerun()
 
             if st.button("❌ Xóa đơn này"):
                 try:
                     delete_order_db(sel_id)
                     st.session_state["flash_msg"] = ("🗑️ Đã xóa đơn.", "warning")
-                    st.session_state["flash_msg"] = ("✅ Đã cập nhật đơn.", "success")
                     st.rerun()
                 except Exception as e:
                     st.session_state["flash_msg"] = (f"❌ Lỗi khi xóa: {e}", "error")
