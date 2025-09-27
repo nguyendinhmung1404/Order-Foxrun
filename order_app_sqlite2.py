@@ -52,7 +52,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 DB_TABLE = "orders"
-REMINDER_DAYS = [9, 7, 5, 3]
+REMINDER_RANGE = 7  # số ngày trước hạn cần nhắc liên tục
 
 # -------------------------
 # Database helpers
@@ -122,7 +122,6 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
     """Update an order by id."""
     try:
-        # Tính toán
         total_cny = float(price_cny) * int(quantity)
         deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
 
@@ -181,9 +180,14 @@ def mark_delivered_db(order_id, delivered_date_str):
         return False, f"Lỗi mark delivered: {e}"
 
 # -------------------------
-# Reminders
+# Reminders (đã chỉnh sửa)
 # -------------------------
 def build_reminders():
+    """
+    Trả về danh sách thông báo:
+    - Nhắc mỗi ngày nếu còn 0–7 ngày tới hạn.
+    - Nhắc cả các đơn đã quá hạn chưa giao, kèm số ngày trễ.
+    """
     df = get_orders_df()
     today = date.today()
     msgs = []
@@ -193,21 +197,52 @@ def build_reminders():
     df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
     df_pending = df[df["delivered_date"].isna()]
     for _, row in df_pending.iterrows():
-        expected = pd.to_datetime(row["expected_date"]).date() if not pd.isna(row["expected_date"]) else None
-        if not expected:
+        if pd.isna(row["expected_date"]):
             continue
+        expected = row["expected_date"].date()
         days_left = (expected - today).days
         if days_left < 0:
-            msgs.append(f"⚠️ Trễ {-days_left} ngày: {row['name']} (ID:{row['id']})")
-        elif days_left == 0:
-            msgs.append(f"🚨 Hôm nay đến hạn: {row['name']} (ID:{row['id']})")
-        elif days_left in REMINDER_DAYS:
-            msgs.append(f"🔔 Còn {days_left} ngày: {row['name']} (ID:{row['id']})")
+            msgs.append(
+                f"⚠️ Đơn **{row['name']}** (ID:{row['id']}) đã trễ **{-days_left} ngày** so với hẹn {expected}"
+            )
+        elif 0 <= days_left <= REMINDER_RANGE:
+            if days_left == 0:
+                msgs.append(
+                    f"🚨 Hôm nay đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
+                )
+            else:
+                msgs.append(
+                    f"🔔 Còn **{days_left} ngày** đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
+                )
     return msgs
 
 # -------------------------
 # UI
 # -------------------------
+st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
+st.title("📦 Quản lý Đơn hàng Foxrun")
+
+menu = st.sidebar.selectbox("Chọn chức năng", [
+    "Thêm đơn mới",
+    "Danh sách & Quản lý",
+    "Cập nhật / Đánh dấu giao",
+    "Nhắc nhở (Reminders)",
+    "Thống kê & Xuất"
+])
+
+# --- Flash message placeholder ---
+flash = st.empty()
+if "flash_msg" in st.session_state:
+    msg, level = st.session_state.pop("flash_msg")
+    if level == "success":
+        flash.success(msg)
+    elif level == "error":
+        flash.error(msg)
+    elif level == "warning":
+        flash.warning(msg)
+    else:
+        flash.info(msg)
+
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 
