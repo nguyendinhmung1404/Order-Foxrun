@@ -15,8 +15,8 @@ except Exception as e:
     raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
 # config: lấy từ streamlit secrets hoặc environment
-SUPABASE_URL = None
-SUPABASE_KEY = None
+SUPABASE_URL = "https://yyfmxolscrzspzumjfls.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM"
 if "SUPABASE_URL" in st.secrets:
     SUPABASE_URL = st.secrets["https://yyfmxolscrzspzumjfls.supabase.co"]
     SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM"]
