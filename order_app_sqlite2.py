@@ -455,24 +455,41 @@ elif menu == "Thống kê & Xuất":
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
-        total = len(df)
-        delivered_mask = df['delivered_date'].notna() if "delivered_date" in df.columns else pd.Series([], dtype=bool)
-        pending = int(df['delivered_date'].isna().sum()) if "delivered_date" in df.columns else total
-        on_time = df[delivered_mask & df['status'].str.contains("Đã giao đúng hẹn", na=False)].shape[0] if "status" in df.columns else 0
-        late = df[delivered_mask & df['status'].str.contains("trễ", na=False)].shape[0] if "status" in df.columns else 0
-        early = df[delivered_mask & df['status'].str.contains("sớm", na=False)].shape[0] if "status" in df.columns else 0
+                # Bảo vệ dữ liệu ngày
+        df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
+        df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Tổng đơn", total)
-        c2.metric("Đã giao", int(delivered_mask.sum()) if hasattr(delivered_mask, "sum") else 0)
-        c3.metric("Đang sản xuất", int(pending))
-        c4.metric("Giao trễ", int(late))
+        # ✅ Phân loại giao hàng
+        def classify(row):
+            if pd.isna(row["delivered_date"]):
+                return "Chưa giao"
+            elif pd.isna(row["expected_date"]):
+                return "Không có hẹn"
+            else:
+                delta = (row["delivered_date"].date() - row["expected_date"].date()).days
+                if delta == 0:
+                    return "Đúng hẹn"
+                elif delta > 0:
+                    return "Trễ"
+                else:
+                    return "Sớm"
 
-        labels = ["Đúng hẹn", "Trễ", "Sớm", "Chưa giao"]
-        counts = [on_time, late, early, pending]
+        df["delivery_status"] = df.apply(classify, axis=1)
+
+        # ✅ Đếm số lượng từng loại
+        stats = df["delivery_status"].value_counts()
+
+        # Vẽ biểu đồ tròn
+        st.subheader("Tỉ lệ giao hàng")
+        import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
-        ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90)
-        ax.axis("equal")
+        ax.pie(
+            stats.values,
+            labels=stats.index,
+            autopct="%.1f%%",
+            startangle=90
+        )
+        ax.axis("equal")  # Giúp hình tròn cân đối
         st.pyplot(fig)
 
         # Hiển thị chi tiết và xuất
