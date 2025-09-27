@@ -240,7 +240,7 @@ if menu == "Thêm đơn mới":
         with col1:
             customer_name = st.text_input("Tên khách hàng", max_chars=100)
             product_name = st.text_input("Tên sản phẩm", max_chars=150)
-            quantity = st.number_input("Số lượng", min_value=1, value=1, step=1)
+            quantity = st.number_input("Số lượng", min_value=0.0, value=1.0, step=0.1, format="%.2f")
             price_cny = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=0.0, format="%.2f")
             deposit_amount = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=0.0, format="%.2f")
             package_info = st.text_input("Kích thước / Cân nặng / Số kiện (nhà máy báo)", max_chars=200)
