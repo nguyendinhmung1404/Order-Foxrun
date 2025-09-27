@@ -52,7 +52,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 DB_TABLE = "orders"
-REMINDER_RANGE = 7  # số ngày trước hạn cần nhắc liên tục
+REMINDER_DAYS = [9, 7, 5, 3]
 
 # -------------------------
 # Database helpers
@@ -122,6 +122,7 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
     """Update an order by id."""
     try:
+        # Tính toán
         total_cny = float(price_cny) * int(quantity)
         deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
 
@@ -180,14 +181,9 @@ def mark_delivered_db(order_id, delivered_date_str):
         return False, f"Lỗi mark delivered: {e}"
 
 # -------------------------
-# Reminders (đã chỉnh sửa)
+# Reminders
 # -------------------------
 def build_reminders():
-    """
-    Trả về danh sách thông báo:
-    - Nhắc mỗi ngày nếu còn 0–7 ngày tới hạn.
-    - Nhắc cả các đơn đã quá hạn chưa giao, kèm số ngày trễ.
-    """
     df = get_orders_df()
     today = date.today()
     msgs = []
@@ -197,23 +193,16 @@ def build_reminders():
     df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
     df_pending = df[df["delivered_date"].isna()]
     for _, row in df_pending.iterrows():
-        if pd.isna(row["expected_date"]):
+        expected = pd.to_datetime(row["expected_date"]).date() if not pd.isna(row["expected_date"]) else None
+        if not expected:
             continue
-        expected = row["expected_date"].date()
         days_left = (expected - today).days
         if days_left < 0:
-            msgs.append(
-                f"⚠️ Đơn **{row['name']}** (ID:{row['id']}) đã trễ **{-days_left} ngày** so với hẹn {expected}"
-            )
-        elif 0 <= days_left <= REMINDER_RANGE:
-            if days_left == 0:
-                msgs.append(
-                    f"🚨 Hôm nay đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
-            else:
-                msgs.append(
-                    f"🔔 Còn **{days_left} ngày** đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
+            msgs.append(f"⚠️ Trễ {-days_left} ngày: {row['name']} (ID:{row['id']})")
+        elif days_left == 0:
+            msgs.append(f"🚨 Hôm nay đến hạn: {row['name']} (ID:{row['id']})")
+        elif days_left in REMINDER_DAYS:
+            msgs.append(f"🔔 Còn {days_left} ngày: {row['name']} (ID:{row['id']})")
     return msgs
 
 # -------------------------
@@ -223,7 +212,27 @@ st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
-    # 1) Thêm đơn mới
+    "Thêm đơn mới",
+    "Danh sách & Quản lý",
+    "Cập nhật / Đánh dấu giao",
+    "Nhắc nhở (Reminders)",
+    "Thống kê & Xuất"
+])
+
+# --- Flash message placeholder ---
+flash = st.empty()
+if "flash_msg" in st.session_state:
+    msg, level = st.session_state.pop("flash_msg")
+    if level == "success":
+        flash.success(msg)
+    elif level == "error":
+        flash.error(msg)
+    elif level == "warning":
+        flash.warning(msg)
+    else:
+        flash.info(msg)
+
+# 1) Thêm đơn mới
 if menu == "Thêm đơn mới":
     st.header("➕ Thêm đơn mới")
     with st.form("form_add"):
@@ -272,7 +281,8 @@ if menu == "Thêm đơn mới":
                 except Exception as e:
                     st.error(f"❌ Lỗi khi lưu đơn: {e}")
 
-    # 2) Danh sách & Quản lý
+
+# 2) Danh sách & Quản lý
 elif menu == "Danh sách & Quản lý":
     st.header("📋 Danh sách đơn hàng")
     df = get_orders_df()
@@ -322,6 +332,7 @@ elif menu == "Danh sách & Quản lý":
                 new_notes = st.text_area("Ghi chú", sel_row.get("notes","") or "")
                 new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)", sel_row.get("package_info","") or "")
                 save = st.form_submit_button("Lưu thay đổi")
+
                 if save:
                     try:
                         update_order_db(
@@ -345,7 +356,9 @@ elif menu == "Danh sách & Quản lý":
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
-    # 3) Cập nhật / Đánh dấu giao
+
+
+# 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
     st.header("🚚 Cập nhật / Đánh dấu đã giao")
     df = get_orders_df()
@@ -364,7 +377,9 @@ elif menu == "Cập nhật / Đánh dấu giao":
                 st.success(f"✅ {msg}")
             else:
                 st.error(msg)
-    # 4) Nhắc nhở (Reminders)
+            st.rerun()
+
+# 4) Nhắc nhở (Reminders)
 elif menu == "Nhắc nhở (Reminders)":
     st.header("🔔 Nhắc nhở đơn hàng sắp đến hạn")
     msgs = build_reminders()
@@ -387,7 +402,7 @@ elif menu == "Nhắc nhở (Reminders)":
             bytes_xlsx = export_df_to_excel_bytes(format_df_for_display(df_remind))
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-    # 5) Thống kê & Xuất
+# 5) Thống kê & Xuất
 elif menu == "Thống kê & Xuất":
     st.header("📊 Thống kê tổng quan")
     df = get_orders_df()
@@ -427,16 +442,3 @@ elif menu == "Thống kê & Xuất":
             st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
-
-
-# ==============================================================
-# Toàn bộ các tab (Thêm, Danh sách, Cập nhật, Thống kê)
-# GIỮ NGUYÊN so với bản bạn đã gửi
-# ==============================================================
-
-# (Nguyên phần code của bạn từ đây trở xuống – giữ nguyên 100%)
-# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-# (Để tiết kiệm dung lượng, mình không lặp lại vì hoàn toàn giống file bạn cung cấp,
-# chỉ khác duy nhất là hàm build_reminders ở trên.)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
