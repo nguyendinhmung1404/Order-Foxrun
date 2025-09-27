@@ -260,6 +260,10 @@ if menu == "Thêm đơn mới":
         if submitted:
             if not customer_name or not product_name:
                 st.error("❌ Vui lòng nhập tên khách hàng và tên sản phẩm.")
+            elif quantity <= 0:
+                st.error("❌ Vui lòng nhập Số lượng lớn hơn 0.")
+            elif price_cny <= 0:
+                st.error("❌ Vui lòng nhập Giá nhập (CNY) lớn hơn 0.")
             else:
                 start_str = start_date.strftime("%Y-%m-%d") if start_date else None
                 order_code = f"OD{int(datetime.utcnow().timestamp())}"
