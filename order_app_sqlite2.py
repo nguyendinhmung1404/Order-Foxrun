@@ -52,7 +52,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 DB_TABLE = "orders"
-REMINDER_RANGE = 7  # số ngày trước hạn cần nhắc liên tục
+REMINDER_DAYS = [9, 7, 5, 3]
 
 # -------------------------
 # Database helpers
@@ -69,9 +69,7 @@ def row_to_df(records):
 def get_orders_df():
     try:
         res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
-        st.write("🔍 Raw Supabase data:", res.data)  # ✅ Kiểm tra dữ liệu gốc
-        df = pd.DataFrame(res.data)                 # ✅ Bỏ qua row_to_df để test
-        return df
+        return row_to_df(res.data)
     except Exception as e:
         st.error(f"Lỗi khi lấy danh sách đơn: {e}")
         return pd.DataFrame()
@@ -124,6 +122,7 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
     """Update an order by id."""
     try:
+        # Tính toán
         total_cny = float(price_cny) * int(quantity)
         deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
 
@@ -182,14 +181,9 @@ def mark_delivered_db(order_id, delivered_date_str):
         return False, f"Lỗi mark delivered: {e}"
 
 # -------------------------
-# Reminders (đã chỉnh sửa)
+# Reminders
 # -------------------------
 def build_reminders():
-    """
-    Trả về danh sách thông báo:
-    - Nhắc mỗi ngày nếu còn 0–7 ngày tới hạn.
-    - Nhắc cả các đơn đã quá hạn chưa giao, kèm số ngày trễ.
-    """
     df = get_orders_df()
     today = date.today()
     msgs = []
@@ -199,23 +193,16 @@ def build_reminders():
     df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
     df_pending = df[df["delivered_date"].isna()]
     for _, row in df_pending.iterrows():
-        if pd.isna(row["expected_date"]):
+        expected = pd.to_datetime(row["expected_date"]).date() if not pd.isna(row["expected_date"]) else None
+        if not expected:
             continue
-        expected = row["expected_date"].date()
         days_left = (expected - today).days
         if days_left < 0:
-            msgs.append(
-                f"⚠️ Đơn **{row['name']}** (ID:{row['id']}) đã trễ **{-days_left} ngày** so với hẹn {expected}"
-            )
-        elif 0 <= days_left <= REMINDER_RANGE:
-            if days_left == 0:
-                msgs.append(
-                    f"🚨 Hôm nay đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
-            else:
-                msgs.append(
-                    f"🔔 Còn **{days_left} ngày** đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}"
-                )
+            msgs.append(f"⚠️ Trễ {-days_left} ngày: {row['name']} (ID:{row['id']})")
+        elif days_left == 0:
+            msgs.append(f"🚨 Hôm nay đến hạn: {row['name']} (ID:{row['id']})")
+        elif days_left in REMINDER_DAYS:
+            msgs.append(f"🔔 Còn {days_left} ngày: {row['name']} (ID:{row['id']})")
     return msgs
 
 # -------------------------
@@ -244,7 +231,7 @@ if "flash_msg" in st.session_state:
         flash.warning(msg)
     else:
         flash.info(msg)
-        
+
 # 1) Thêm đơn mới
 if menu == "Thêm đơn mới":
     st.header("➕ Thêm đơn mới")
@@ -295,9 +282,7 @@ if menu == "Thêm đơn mới":
                     st.error(f"❌ Lỗi khi lưu đơn: {e}")
 
 
-# -------------------------
 # 2) Danh sách & Quản lý
-# -------------------------
 elif menu == "Danh sách & Quản lý":
     st.header("📋 Danh sách đơn hàng")
     df = get_orders_df()
@@ -319,40 +304,13 @@ elif menu == "Danh sách & Quản lý":
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
 
         display = format_df_for_display(filtered)
-        show_cols = [
-            "id","order_code","name","quantity","price_cny","total_cny",
-            "deposit_amount","deposit_ratio","start_date","lead_time",
-            "expected_date","delivered_date","status","delta_days",
-            "notes","package_info"
-        ]
+        show_cols = ["id","order_code","name","quantity","price_cny","total_cny","deposit_amount","deposit_ratio",
+                     "start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
         show_cols = [c for c in show_cols if c in display.columns]
+        st.dataframe(display[show_cols], use_container_width=True)
 
-        # 🔑 ĐỔI TÊN CỘT SANG TIẾNG VIỆT
-        vietnamese_cols = {
-            "id": "STT",
-            "order_code": "Mã đơn",
-            "name": "Tên khách",
-            "quantity": "Số lượng",
-            "price_cny": "Giá nhập (CNY)",
-            "total_cny": "Tổng tiền (CNY)",
-            "deposit_amount": "Tiền đặt cọc (CNY)",
-            "deposit_ratio": "Đặt cọc (%)",
-            "start_date": "Ngày bắt đầu",
-            "lead_time": "Số ngày SX",
-            "expected_date": "Ngày dự kiến giao",
-            "delivered_date": "Ngày giao thực tế",
-            "status": "Trạng thái",
-            "delta_days": "Chênh lệch ngày",
-            "notes": "Ghi chú",
-            "package_info": "Thông tin kiện hàng"
-        }
-
-        display_renamed = display[show_cols].rename(columns=vietnamese_cols)
-        st.dataframe(display_renamed, use_container_width=True)
-
-        # ------ Chọn đơn để sửa / xóa ------
         opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
-        if opts:  # ✅ Chỉ render form nếu còn đơn
+        if opts:
             sel = st.selectbox("Chọn đơn để Sửa / Xóa", options=opts)
             sel_id = int(sel.split(" - ")[0])
             sel_row = df[df["id"]==sel_id].iloc[0]
@@ -367,17 +325,12 @@ elif menu == "Danh sách & Quản lý":
                 except Exception:
                     start_default = date.today()
                 new_start = st.date_input("Ngày bắt đầu", start_default)
-                new_lead = st.number_input("Số ngày sản xuất", min_value=0,
-                                           value=int(sel_row.get("lead_time") or 0), step=1)
-                new_quantity = st.number_input("Số lượng", min_value=1.0,
-                                               value=float(sel_row.get("quantity") or 1.0), step=0.1, format="%.2f")
-                new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0,
-                                            value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
-                new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0,
-                                              value=float(sel_row.get("deposit_amount") or 0.0), format="%.2f")
+                new_lead = st.number_input("Số ngày sản xuất", min_value=0, value=int(sel_row.get("lead_time") or 0), step=1)
+                new_quantity = st.number_input("Số lượng", min_value=1, value=int(sel_row.get("quantity") or 1), step=1)
+                new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
+                new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=float(sel_row.get("deposit_amount") or 0.0), format="%.2f")
                 new_notes = st.text_area("Ghi chú", sel_row.get("notes","") or "")
-                new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)",
-                                           sel_row.get("package_info","") or "")
+                new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)", sel_row.get("package_info","") or "")
                 save = st.form_submit_button("Lưu thay đổi")
 
                 if save:
@@ -403,8 +356,7 @@ elif menu == "Danh sách & Quản lý":
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
-        else:
-            st.info("Không có đơn để sửa hoặc xóa.")
+
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
@@ -450,100 +402,42 @@ elif menu == "Nhắc nhở (Reminders)":
             bytes_xlsx = export_df_to_excel_bytes(format_df_for_display(df_remind))
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
+# -------------------------
 # 5) Thống kê & Xuất
-elif menu == "📊 Thống kê & Xuất":
-    st.header("📊 Thống kê & Xuất")
+# -------------------------
+elif menu == "Thống kê & Xuất":
+    st.header("📊 Thống kê tổng quan")
     df = get_orders_df()
-    st.write("🔎 Debug df:", df)    # ✅ THÊM DÒNG NÀY
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
-        st.stop()
     else:
-        # --- Chuẩn hóa ngày ---
-        df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
-        df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
+        total = len(df)
+        delivered_mask = df['delivered_date'].notna()
+        pending = df['delivered_date'].isna().sum()
+        on_time = df[delivered_mask & df['status'].str.contains("Đã giao đúng hẹn", na=False)].shape[0]
+        late = df[delivered_mask & df['status'].str.contains("trễ", na=False)].shape[0]
+        early = df[delivered_mask & df['status'].str.contains("sớm", na=False)].shape[0]
 
-        # --- Tính delta_days (nếu có delivered và expected) ---
-        try:
-            df["delta_days"] = (df["delivered_date"] - df["expected_date"]).dt.days
-        except Exception:
-            df["delta_days"] = pd.NA
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Tổng đơn", total)
+        c2.metric("Đã giao", int(delivered_mask.sum()))
+        c3.metric("Đang sản xuất", int(pending))
+        c4.metric("Giao trễ", int(late))
 
-        # --- Phân loại trạng thái giao hàng ---
-        def classify(row):
-            if pd.isna(row["delivered_date"]):
-                return "Chưa giao"
-            if pd.isna(row["expected_date"]):
-                return "Không có hẹn"
-            try:
-                delta = int((row["delivered_date"].date() - row["expected_date"].date()).days)
-            except Exception:
-                return "Không có hẹn"
-            if delta == 0:
-                return "Đúng hẹn"
-            elif delta > 0:
-                return "Trễ"
-            else:
-                return "Sớm"
+        labels = ["Đúng hẹn", "Trễ", "Sớm", "Chưa giao"]
+        counts = [on_time, late, early, pending]
+        fig, ax = plt.subplots()
+        ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90)
+        ax.axis("equal")
+        st.pyplot(fig)
 
-        df["delivery_status"] = df.apply(classify, axis=1)
-
-        # --- Tính các chỉ số tổng quan (an toàn nếu cột status không tồn tại) ---
-        tong_don = len(df)
-        status_series = df["status"] if "status" in df.columns else pd.Series([""] * len(df))
-        status_series = status_series.fillna("")
-        dang_sx = int((status_series == "Đang sản xuất").sum())
-        giao_tre = int((df["delivery_status"] == "Trễ").sum())
-        giao_som = int((df["delivery_status"] == "Sớm").sum())
-        dung_hen = int((df["delivery_status"] == "Đúng hẹn").sum())
-
-        st.subheader("📊 Thống kê tổng quan")
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Tổng đơn", int(tong_don))
-        c2.metric("Đang sản xuất", int(dang_sx))
-        c3.metric("Đơn trễ", int(giao_tre))
-        c4.metric("Đơn sớm", int(giao_som))
-        c5.metric("Đúng hẹn", int(dung_hen))
-
-        # --- Biểu đồ tròn (tỉ lệ) ---
-        stats = df["delivery_status"].value_counts()
-        if not stats.empty:
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots()
-            ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
-            ax.axis("equal")
-            st.subheader("Tỉ lệ giao hàng")
-            st.pyplot(fig)
-        else:
-            st.info("Không có dữ liệu để vẽ biểu đồ tỉ lệ.")
-
-        # --- Biểu đồ theo tháng (số đơn theo tháng theo expected_date) ---
-        if "expected_date" in df.columns and df["expected_date"].notna().any():
-            monthly = (df.dropna(subset=["expected_date"])
-                         .groupby(df["expected_date"].dt.to_period("M"))
-                         .size()
-                         .reset_index(name="Số đơn"))
-            monthly["expected_date"] = monthly["expected_date"].astype(str)
-            fig2, ax2 = plt.subplots(figsize=(8, 4))
-            ax2.bar(monthly["expected_date"], monthly["Số đơn"])
-            ax2.set_title("Số đơn theo tháng (theo ngày dự kiến)")
-            ax2.set_xlabel("Tháng")
-            ax2.set_ylabel("Số đơn")
-            plt.xticks(rotation=45)
-            st.pyplot(fig2)
-
-        # --- Hiển thị chi tiết và xuất Excel ---
         df_display = format_df_for_display(df)
         st.subheader("Chi tiết đơn hàng")
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
-                     "delivered_date","delta_days","status","notes","package_info"]
-        show_cols = [c for c in show_cols if c in df_display.columns]
-        st.dataframe(df_display[show_cols], use_container_width=True)
+        st.dataframe(df_display[["id","order_code","name","start_date","lead_time","expected_date","delivered_date","delta_days","status","notes","package_info"]], use_container_width=True)
 
-        # Xuất Excel: hiển thị nút tải (không cần bấm thêm một nút nữa)
-        bytes_xlsx = export_df_to_excel_bytes(df_display)
-        st.download_button("📥 Tải báo cáo (Excel)", data=bytes_xlsx,
-                           file_name=f"bao_cao_don_hang_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        if st.button("Xuất toàn bộ báo cáo (Excel)"):
+            bytes_xlsx = export_df_to_excel_bytes(df_display)
+            st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
+
