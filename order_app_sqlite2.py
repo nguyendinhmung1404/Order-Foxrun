@@ -451,57 +451,85 @@ elif menu == "Nhắc nhở (Reminders)":
 # 5) Thống kê & Xuất
 elif menu == "📊 Thống kê & Xuất":
     st.header("📊 Thống kê & Xuất")
-    df = get_all_orders_df()
-    if df.empty:
+    # Lấy dữ liệu (sử dụng hàm get_orders_df - đảm bảo hàm này tồn tại trong file)
+    df = get_orders_df()
+    if df is None or df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
-        import matplotlib.pyplot as plt  # ✅ đảm bảo import
-
-        # Chuyển kiểu ngày
+        # --- Chuẩn hóa ngày ---
         df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
         df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
 
-        # Phân loại tình trạng giao hàng
+        # --- Tính delta_days (nếu có delivered và expected) ---
+        try:
+            df["delta_days"] = (df["delivered_date"] - df["expected_date"]).dt.days
+        except Exception:
+            df["delta_days"] = pd.NA
+
+        # --- Phân loại trạng thái giao hàng ---
         def classify(row):
             if pd.isna(row["delivered_date"]):
                 return "Chưa giao"
-            elif pd.isna(row["expected_date"]):
+            if pd.isna(row["expected_date"]):
                 return "Không có hẹn"
+            try:
+                delta = int((row["delivered_date"].date() - row["expected_date"].date()).days)
+            except Exception:
+                return "Không có hẹn"
+            if delta == 0:
+                return "Đúng hẹn"
+            elif delta > 0:
+                return "Trễ"
             else:
-                delta = (row["delivered_date"].date() - row["expected_date"].date()).days
-                if delta == 0:
-                    return "Đúng hẹn"
-                elif delta > 0:
-                    return "Trễ"
-                else:
-                    return "Sớm"
+                return "Sớm"
 
         df["delivery_status"] = df.apply(classify, axis=1)
 
-        # 🟢 Thống kê tổng quan
+        # --- Tính các chỉ số tổng quan (an toàn nếu cột status không tồn tại) ---
         tong_don = len(df)
-        dang_sx = (df.get("status") == "Đang sản xuất").sum()
-        giao_tre = (df["delivery_status"] == "Trễ").sum()
-        giao_som = (df["delivery_status"] == "Sớm").sum()
-        dung_hen = (df["delivery_status"] == "Đúng hẹn").sum()
+        status_series = df["status"] if "status" in df.columns else pd.Series([""] * len(df))
+        status_series = status_series.fillna("")
+        dang_sx = int((status_series == "Đang sản xuất").sum())
+        giao_tre = int((df["delivery_status"] == "Trễ").sum())
+        giao_som = int((df["delivery_status"] == "Sớm").sum())
+        dung_hen = int((df["delivery_status"] == "Đúng hẹn").sum())
 
         st.subheader("📊 Thống kê tổng quan")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Tổng đơn", int(tong_don))
-        col2.metric("Đang sản xuất", int(dang_sx))
-        col3.metric("Đơn trễ", int(giao_tre))
-        col4.metric("Đơn sớm", int(giao_som))
-        col5.metric("Đúng hẹn", int(dung_hen))
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Tổng đơn", int(tong_don))
+        c2.metric("Đang sản xuất", int(dang_sx))
+        c3.metric("Đơn trễ", int(giao_tre))
+        c4.metric("Đơn sớm", int(giao_som))
+        c5.metric("Đúng hẹn", int(dung_hen))
 
-        # 🔵 Biểu đồ tròn
+        # --- Biểu đồ tròn (tỉ lệ) ---
         stats = df["delivery_status"].value_counts()
-        fig, ax = plt.subplots()
-        ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
-        ax.axis("equal")
-        st.subheader("Tỉ lệ giao hàng")
-        st.pyplot(fig)
+        if not stats.empty:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
+            ax.axis("equal")
+            st.subheader("Tỉ lệ giao hàng")
+            st.pyplot(fig)
+        else:
+            st.info("Không có dữ liệu để vẽ biểu đồ tỉ lệ.")
 
-        # Hiển thị chi tiết và xuất
+        # --- Biểu đồ theo tháng (số đơn theo tháng theo expected_date) ---
+        if "expected_date" in df.columns and df["expected_date"].notna().any():
+            monthly = (df.dropna(subset=["expected_date"])
+                         .groupby(df["expected_date"].dt.to_period("M"))
+                         .size()
+                         .reset_index(name="Số đơn"))
+            monthly["expected_date"] = monthly["expected_date"].astype(str)
+            fig2, ax2 = plt.subplots(figsize=(8, 4))
+            ax2.bar(monthly["expected_date"], monthly["Số đơn"])
+            ax2.set_title("Số đơn theo tháng (theo ngày dự kiến)")
+            ax2.set_xlabel("Tháng")
+            ax2.set_ylabel("Số đơn")
+            plt.xticks(rotation=45)
+            st.pyplot(fig2)
+
+        # --- Hiển thị chi tiết và xuất Excel ---
         df_display = format_df_for_display(df)
         st.subheader("Chi tiết đơn hàng")
         show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
@@ -509,8 +537,10 @@ elif menu == "📊 Thống kê & Xuất":
         show_cols = [c for c in show_cols if c in df_display.columns]
         st.dataframe(df_display[show_cols], use_container_width=True)
 
-        if st.button("Xuất toàn bộ báo cáo (Excel)"):
-            bytes_xlsx = export_df_to_excel_bytes(df_display)
-            st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        # Xuất Excel: hiển thị nút tải (không cần bấm thêm một nút nữa)
+        bytes_xlsx = export_df_to_excel_bytes(df_display)
+        st.download_button("📥 Tải báo cáo (Excel)", data=bytes_xlsx,
+                           file_name=f"bao_cao_don_hang_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
