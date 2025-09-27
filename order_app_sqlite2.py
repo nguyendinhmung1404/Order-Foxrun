@@ -69,7 +69,9 @@ def row_to_df(records):
 def get_orders_df():
     try:
         res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
-        return row_to_df(res.data)
+        st.write("🔍 Raw Supabase data:", res.data)  # ✅ Kiểm tra dữ liệu gốc
+        df = pd.DataFrame(res.data)                 # ✅ Bỏ qua row_to_df để test
+        return df
     except Exception as e:
         st.error(f"Lỗi khi lấy danh sách đơn: {e}")
         return pd.DataFrame()
