@@ -402,9 +402,7 @@ elif menu == "Nhắc nhở (Reminders)":
             bytes_xlsx = export_df_to_excel_bytes(format_df_for_display(df_remind))
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# -------------------------
 # 5) Thống kê & Xuất
-# -------------------------
 elif menu == "Thống kê & Xuất":
     st.header("📊 Thống kê tổng quan")
     df = get_orders_df()
@@ -412,15 +410,15 @@ elif menu == "Thống kê & Xuất":
         st.info("Chưa có dữ liệu để thống kê.")
     else:
         total = len(df)
-        delivered_mask = df['delivered_date'].notna()
-        pending = df['delivered_date'].isna().sum()
-        on_time = df[delivered_mask & df['status'].str.contains("Đã giao đúng hẹn", na=False)].shape[0]
-        late = df[delivered_mask & df['status'].str.contains("trễ", na=False)].shape[0]
-        early = df[delivered_mask & df['status'].str.contains("sớm", na=False)].shape[0]
+        delivered_mask = df['delivered_date'].notna() if "delivered_date" in df.columns else pd.Series([], dtype=bool)
+        pending = int(df['delivered_date'].isna().sum()) if "delivered_date" in df.columns else total
+        on_time = df[delivered_mask & df['status'].str.contains("Đã giao đúng hẹn", na=False)].shape[0] if "status" in df.columns else 0
+        late = df[delivered_mask & df['status'].str.contains("trễ", na=False)].shape[0] if "status" in df.columns else 0
+        early = df[delivered_mask & df['status'].str.contains("sớm", na=False)].shape[0] if "status" in df.columns else 0
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Tổng đơn", total)
-        c2.metric("Đã giao", int(delivered_mask.sum()))
+        c2.metric("Đã giao", int(delivered_mask.sum()) if hasattr(delivered_mask, "sum") else 0)
         c3.metric("Đang sản xuất", int(pending))
         c4.metric("Giao trễ", int(late))
 
@@ -431,13 +429,16 @@ elif menu == "Thống kê & Xuất":
         ax.axis("equal")
         st.pyplot(fig)
 
+        # Hiển thị chi tiết và xuất
         df_display = format_df_for_display(df)
         st.subheader("Chi tiết đơn hàng")
-        st.dataframe(df_display[["id","order_code","name","start_date","lead_time","expected_date","delivered_date","delta_days","status","notes","package_info"]], use_container_width=True)
+        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
+                     "delivered_date","delta_days","status","notes","package_info"]
+        show_cols = [c for c in show_cols if c in df_display.columns]
+        st.dataframe(df_display[show_cols], use_container_width=True)
 
         if st.button("Xuất toàn bộ báo cáo (Excel)"):
             bytes_xlsx = export_df_to_excel_bytes(df_display)
             st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
-
