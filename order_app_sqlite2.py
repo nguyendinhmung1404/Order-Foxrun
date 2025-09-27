@@ -25,6 +25,10 @@ else:
     SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
+    import streamlit as st
+
+st.write("DEBUG secrets:", list(st.secrets.keys()))
+
     raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY dưới streamlit secrets hoặc biến môi trường.")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
