@@ -293,7 +293,9 @@ if menu == "Thêm đơn mới":
                     st.error(f"❌ Lỗi khi lưu đơn: {e}")
 
 
+# -------------------------
 # 2) Danh sách & Quản lý
+# -------------------------
 elif menu == "Danh sách & Quản lý":
     st.header("📋 Danh sách đơn hàng")
     df = get_orders_df()
@@ -315,9 +317,14 @@ elif menu == "Danh sách & Quản lý":
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
 
         display = format_df_for_display(filtered)
-        show_cols = ["id","order_code","name","quantity","price_cny","total_cny","deposit_amount","deposit_ratio",
-                     "start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
+        show_cols = [
+            "id","order_code","name","quantity","price_cny","total_cny",
+            "deposit_amount","deposit_ratio","start_date","lead_time",
+            "expected_date","delivered_date","status","delta_days",
+            "notes","package_info"
+        ]
         show_cols = [c for c in show_cols if c in display.columns]
+
         # 🔑 ĐỔI TÊN CỘT SANG TIẾNG VIỆT
         vietnamese_cols = {
             "id": "STT",
@@ -327,7 +334,7 @@ elif menu == "Danh sách & Quản lý":
             "price_cny": "Giá nhập (CNY)",
             "total_cny": "Tổng tiền (CNY)",
             "deposit_amount": "Tiền đặt cọc (CNY)",
-            "deposit_ratio": "Đặt cọc(%)",
+            "deposit_ratio": "Đặt cọc (%)",
             "start_date": "Ngày bắt đầu",
             "lead_time": "Số ngày SX",
             "expected_date": "Ngày dự kiến giao",
@@ -337,8 +344,11 @@ elif menu == "Danh sách & Quản lý":
             "notes": "Ghi chú",
             "package_info": "Thông tin kiện hàng"
         }
-        st.dataframe(display[show_cols], use_container_width=True)
 
+        display_renamed = display[show_cols].rename(columns=vietnamese_cols)
+        st.dataframe(display_renamed, use_container_width=True)
+
+        # ------ Chọn đơn để sửa / xóa ------
         opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
         if opts:
             sel = st.selectbox("Chọn đơn để Sửa / Xóa", options=opts)
@@ -355,12 +365,17 @@ elif menu == "Danh sách & Quản lý":
                 except Exception:
                     start_default = date.today()
                 new_start = st.date_input("Ngày bắt đầu", start_default)
-                new_lead = st.number_input("Số ngày sản xuất", min_value=0, value=int(sel_row.get("lead_time") or 0), step=1)
-                new_quantity = st.number_input("Số lượng", min_value=1, value=int(sel_row.get("quantity") or 1), step=1)
-                new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0, value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
-                new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=float(sel_row.get("deposit_amount") or 0.0), format="%.2f")
+                new_lead = st.number_input("Số ngày sản xuất", min_value=0,
+                                           value=int(sel_row.get("lead_time") or 0), step=1)
+                new_quantity = st.number_input("Số lượng", min_value=1,
+                                               value=float(sel_row.get("quantity") or 1), step=0.1, format="%.2f")
+                new_price = st.number_input("Giá nhập (CNY) / 1 sp", min_value=0.0,
+                                            value=float(sel_row.get("price_cny") or 0.0), format="%.2f")
+                new_deposit = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0,
+                                              value=float(sel_row.get("deposit_amount") or 0.0), format="%.2f")
                 new_notes = st.text_area("Ghi chú", sel_row.get("notes","") or "")
-                new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)", sel_row.get("package_info","") or "")
+                new_package = st.text_area("Kích thước / Cân nặng / Số kiện (nhà máy báo)",
+                                           sel_row.get("package_info","") or "")
                 save = st.form_submit_button("Lưu thay đổi")
 
                 if save:
