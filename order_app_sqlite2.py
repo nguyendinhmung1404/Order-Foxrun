@@ -401,8 +401,8 @@ elif menu == "Danh sách & Quản lý":
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
-else:
-    st.info("Không có đơn để sửa hoặc xóa.")
+        else:
+            st.info("Không có đơn để sửa hoặc xóa.")
 
 # 3) Cập nhật / Đánh dấu giao
 elif menu == "Cập nhật / Đánh dấu giao":
