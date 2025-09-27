@@ -153,28 +153,6 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
     except Exception as e:
         raise RuntimeError(f"Supabase update error: {e}")
 
-def update_order_db(order_id, order_code, name, start_date_str, lead_time_int, notes, package_info=""):
-    try:
-        expected = None
-        if start_date_str:
-            try:
-                expected = (datetime.strptime(start_date_str, "%Y-%m-%d") + timedelta(days=int(lead_time_int))).date().isoformat()
-            except:
-                expected = None
-        payload = {
-            "order_code": order_code,
-            "name": name,
-            "start_date": start_date_str,
-            "lead_time": int(lead_time_int) if lead_time_int else None,
-            "expected_date": expected,
-            "notes": notes,
-            "package_info": package_info,
-        }
-        res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
-        return res.data
-    except Exception as e:
-        raise RuntimeError(f"Lỗi update: {e}")
-
 def delete_order_db(order_id):
     try:
         res = supabase.table(DB_TABLE).delete().eq("id", int(order_id)).execute()
