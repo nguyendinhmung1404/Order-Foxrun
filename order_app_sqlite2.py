@@ -403,22 +403,27 @@ elif menu == "Thống kê & Xuất":
         c3.metric("Đang sản xuất", int(pending))
         c4.metric("Giao trễ", int(late))
 
-        labels = ["Đúng hẹn", "Trễ", "Sớm", "Chưa giao"]
-        counts = [on_time, late, early, pending]
-        fig, ax = plt.subplots()
-        ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90)
-        ax.axis("equal")
-        st.pyplot(fig)
+       labels = ["Đúng hẹn", "Trễ", "Sớm", "Chưa giao"]
+counts = [on_time, late, early, pending]
+fig, ax = plt.subplots()
+ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90)
+ax.axis("equal")
+st.pyplot(fig)
 
-        df_display = format_df_for_display(df)
-        st.subheader("Chi tiết đơn hàng")
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date","delivered_date","delta_days","status","notes","package_info"]
-        show_cols = [c for c in show_cols if c in df_display.columns]
-        st.dataframe(df_display[show_cols], use_container_width=True)
+# 🔹 Tải dữ liệu đơn hàng từ Supabase
+df = load_orders()
 
-        if st.button("Xuất toàn bộ báo cáo (Excel)"):
-            bytes_xlsx = export_df_to_excel_bytes(df_display)
-            st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+df_display = format_df_for_display(df)
+st.subheader("Chi tiết đơn hàng")
+show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
+             "delivered_date","delta_days","status","notes","package_info"]
+show_cols = [c for c in show_cols if c in df_display.columns]
+st.dataframe(df_display[show_cols], use_container_width=True)
 
-        st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
-_
+if st.button("Xuất toàn bộ báo cáo (Excel)"):
+    bytes_xlsx = export_df_to_excel_bytes(df_display)
+    st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx,
+                       file_name="bao_cao_don_hang.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
