@@ -380,27 +380,53 @@ elif menu == "Cập nhật / Đánh dấu giao":
             st.rerun()
 
 # 4) Nhắc nhở (Reminders)
-elif menu == "Nhắc nhở (Reminders)":
-    st.header("🔔 Nhắc nhở đơn hàng sắp đến hạn")
-    msgs = build_reminders()
-    if not msgs:
-        st.success("Không có đơn cần nhắc hôm nay.")
-    else:
-        st.write(f"🔔 Có {len(msgs)} thông báo:")
-        for m in msgs:
-            st.write("-", m)
-        if st.button("Xuất danh sách nhắc (Excel)"):
-            df_all = get_orders_df()
-            if not df_all.empty and "expected_date" in df_all.columns:
-                df_all['expected_date'] = pd.to_datetime(df_all['expected_date'], errors='coerce')
-                df_pending = df_all[df_all['delivered_date'].isna()] if "delivered_date" in df_all.columns else df_all.copy()
-                today = date.today()
-                df_pending['days_left'] = df_pending['expected_date'].dt.date.apply(lambda d: (d - today).days)
-                df_remind = df_pending[df_pending['days_left'].isin(REMINDER_DAYS + [0]) | (df_pending['days_left'] < 0)]
+def build_reminders():
+    """
+    Nhắc nhở:
+    - Mỗi ngày từ 0 → 7 ngày trước ngày dự kiến giao hàng đều nhắc.
+    - Nhắc cả các đơn đã quá hạn nhưng chưa đánh dấu giao.
+    - Kèm số ngày còn lại hoặc số ngày đã trễ.
+    """
+    df = get_orders_df()
+    today = date.today()
+    msgs = []
+
+    if df.empty:
+        return msgs
+
+    # Chỉ lấy các đơn chưa giao
+    df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
+    df["delivered_date"] = pd.to_datetime(df["delivered_date"], errors="coerce")
+    df_pending = df[df["delivered_date"].isna()]
+
+    for _, row in df_pending.iterrows():
+        expected = (
+            pd.to_datetime(row["expected_date"]).date()
+            if not pd.isna(row["expected_date"])
+            else None
+        )
+        if not expected:
+            continue
+
+        days_left = (expected - today).days
+
+        if days_left < 0:
+            # Quá hạn
+            msgs.append(
+                f"⚠️ Đơn **{row['name']}** (ID:{row['id']}) đã trễ **{-days_left} ngày** so với ngày hẹn ({expected})."
+            )
+        elif 0 <= days_left <= 7:
+            # 0-7 ngày trước hạn
+            if days_left == 0:
+                msgs.append(
+                    f"🚨 Hôm nay đến hạn giao đơn **{row['name']}** (ID:{row['id']})."
+                )
             else:
-                df_remind = pd.DataFrame()
-            bytes_xlsx = export_df_to_excel_bytes(format_df_for_display(df_remind))
-            st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                msgs.append(
+                    f"🔔 Còn **{days_left} ngày** sẽ đến hạn giao đơn **{row['name']}** (ID:{row['id']}) — hẹn {expected}."
+                )
+    return msgs
+
 
 # 5) Thống kê & Xuất
 elif menu == "Thống kê & Xuất":
