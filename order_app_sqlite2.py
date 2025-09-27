@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 from io import BytesIO
 
 import os
-DB_FILE = os.path.expanduser("~/Desktop/orders.db")  # đường dẫn cố định DB
+DB_FILE = os.path.join(os.path.dirname(__file__), "orders.db")
 REMINDER_DAYS = [9, 7, 5, 3]  # danh sách ngày sẽ nhắc trước hạn
 
 # -------------------------
