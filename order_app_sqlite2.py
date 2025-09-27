@@ -455,10 +455,13 @@ elif menu == "📊 Thống kê & Xuất":
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
+        import matplotlib.pyplot as plt  # ✅ đảm bảo import
+
+        # Chuyển kiểu ngày
         df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
         df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
 
-        # ✅ Phân loại giao hàng
+        # Phân loại tình trạng giao hàng
         def classify(row):
             if pd.isna(row["delivered_date"]):
                 return "Chưa giao"
@@ -472,25 +475,25 @@ elif menu == "📊 Thống kê & Xuất":
                     return "Trễ"
                 else:
                     return "Sớm"
+
         df["delivery_status"] = df.apply(classify, axis=1)
 
-        # ✅ 🟢 THỐNG KÊ TỔNG QUAN
+        # 🟢 Thống kê tổng quan
         tong_don = len(df)
-        dang_sx = (df["status"] == "Đang sản xuất").sum()
+        dang_sx = (df.get("status") == "Đang sản xuất").sum()
         giao_tre = (df["delivery_status"] == "Trễ").sum()
         giao_som = (df["delivery_status"] == "Sớm").sum()
         dung_hen = (df["delivery_status"] == "Đúng hẹn").sum()
 
         st.subheader("📊 Thống kê tổng quan")
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Tổng đơn", tong_don)
-        col2.metric("Đang sản xuất", dang_sx)
-        col3.metric("Đơn trễ", giao_tre)
-        col4.metric("Đơn sớm", giao_som)
-        col5.metric("Đúng hẹn", dung_hen)
+        col1.metric("Tổng đơn", int(tong_don))
+        col2.metric("Đang sản xuất", int(dang_sx))
+        col3.metric("Đơn trễ", int(giao_tre))
+        col4.metric("Đơn sớm", int(giao_som))
+        col5.metric("Đúng hẹn", int(dung_hen))
 
-        # ✅ Vẽ biểu đồ tròn
-        import matplotlib.pyplot as plt
+        # 🔵 Biểu đồ tròn
         stats = df["delivery_status"].value_counts()
         fig, ax = plt.subplots()
         ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
