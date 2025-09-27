@@ -14,24 +14,38 @@ try:
 except Exception as e:
     raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
-# config: lấy từ streamlit secrets hoặc environment
-SUPABASE_URL = "https://yyfmxolscrzspzumjfls.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM"
-if "SUPABASE_URL" in st.secrets:
-    SUPABASE_URL = st.secrets["https://yyfmxolscrzspzumjfls.supabase.co"]
-    SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM"]
-else:
-    SUPABASE_URL = os.getenv("https://yyfmxolscrzspzumjfls.supabase.co")
-    SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl5Zm14b2xzY3J6c3B6dW1qZmxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5ODEwMzYsImV4cCI6MjA3NDU1NzAzNn0.n95H1dyfLSlo5HCV_ekfPbIkoEmYbJTo4xOPHqSkwXM")
+# -------------------------
+# Cấu hình Supabase
+# -------------------------
+SUPABASE_URL = None
+SUPABASE_KEY = None
 
+# Ưu tiên lấy từ Streamlit secrets (khi deploy trên Streamlit Cloud)
+if hasattr(st, "secrets"):
+    SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+
+# Nếu không có, fallback sang biến môi trường
+if not SUPABASE_URL:
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+if not SUPABASE_KEY:
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# Debug: chỉ báo có/không (không in key thật để tránh lộ)
+st.write("DEBUG: SUPABASE_URL present?", bool(SUPABASE_URL))
+st.write("DEBUG: SUPABASE_KEY present?", bool(SUPABASE_KEY))
+
+# Nếu thiếu thì dừng hẳn
 if not SUPABASE_URL or not SUPABASE_KEY:
-    import streamlit as st
+    raise RuntimeError(
+        "Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY trong Streamlit Secrets hoặc biến môi trường."
+    )
 
-st.write("DEBUG secrets:", list(st.secrets.keys()))
-
-raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY dưới streamlit secrets hoặc biến môi trường.")
-
+# Khởi tạo client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+DB_TABLE = "orders"
+REMINDER_DAYS = [9, 7, 5, 3]
 
 DB_TABLE = "orders"
 REMINDER_DAYS = [9, 7, 5, 3]
