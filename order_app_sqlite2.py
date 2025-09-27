@@ -318,6 +318,25 @@ elif menu == "Danh sách & Quản lý":
         show_cols = ["id","order_code","name","quantity","price_cny","total_cny","deposit_amount","deposit_ratio",
                      "start_date","lead_time","expected_date","delivered_date","status","delta_days","notes","package_info"]
         show_cols = [c for c in show_cols if c in display.columns]
+        # 🔑 ĐỔI TÊN CỘT SANG TIẾNG VIỆT
+        vietnamese_cols = {
+            "id": "STT",
+            "order_code": "Mã đơn",
+            "name": "Tên khách",
+            "quantity": "Số lượng",
+            "price_cny": "Giá nhập (CNY)",
+            "total_cny": "Tổng tiền (CNY)",
+            "deposit_amount": "Tiền đặt cọc (CNY)",
+            "deposit_ratio": "Đặt cọc(%)",
+            "start_date": "Ngày bắt đầu",
+            "lead_time": "Số ngày SX",
+            "expected_date": "Ngày dự kiến giao",
+            "delivered_date": "Ngày giao thực tế",
+            "status": "Trạng thái",
+            "delta_days": "Chênh lệch ngày",
+            "notes": "Ghi chú",
+            "package_info": "Thông tin kiện hàng"
+        }
         st.dataframe(display[show_cols], use_container_width=True)
 
         opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
