@@ -514,9 +514,47 @@ elif menu == "Thống kê & Xuất":
         show_cols = [c for c in show_cols if c in df_display.columns]
         st.dataframe(df_display[show_cols], use_container_width=True)
 
-        if st.button("Xuất toàn bộ báo cáo (Excel)"):
-            bytes_xlsx = export_df_to_excel_bytes(df_display)
-            st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        import pytz
+from datetime import date
 
+# --- Bộ lọc thời gian xuất báo cáo ---
+st.subheader("📅 Bộ lọc thời gian xuất báo cáo")
+col_from, col_to = st.columns(2)
+tz = pytz.timezone("Asia/Bangkok")  # ✅ Múi giờ +7
+
+min_date = df_display["start_date"].min()
+max_date = df_display["start_date"].max()
+# Đảm bảo dữ liệu kiểu ngày
+df_display["start_date"] = pd.to_datetime(df_display["start_date"], errors="coerce")
+
+start_filter = col_from.date_input(
+    "Từ ngày",
+    value=min_date.date() if pd.notna(min_date) else date.today()
+)
+end_filter = col_to.date_input(
+    "Đến ngày",
+    value=max_date.date() if pd.notna(max_date) else date.today()
+)
+
+# Lọc dữ liệu theo khoảng thời gian
+mask = (df_display["start_date"].dt.tz_localize("UTC")
+        .dt.tz_convert(tz).dt.date >= start_filter) & \
+       (df_display["start_date"].dt.tz_localize("UTC")
+        .dt.tz_convert(tz).dt.date <= end_filter)
+
+df_export = df_display[mask].copy()
+
+st.info(f"📊 Đang chọn từ **{start_filter}** đến **{end_filter}** "
+        f"→ {len(df_export)} đơn hàng.")
+
+# --- Xuất file Excel ---
+if st.button("📥 Xuất báo cáo đã lọc"):
+    bytes_xlsx = export_df_to_excel_bytes(df_export)
+    st.download_button(
+        "📥 Tải báo cáo.xlsx",
+        data=bytes_xlsx,
+        file_name=f"bao_cao_{start_filter}_den_{end_filter}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
 
