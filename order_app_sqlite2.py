@@ -253,66 +253,6 @@ def build_reminders():
 # -------------------------
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
-from supabase import create_client
-
-import streamlit as st
-from supabase import create_client
-
-# --- Supabase config ---
-SUPABASE_URL = st.secrets["supabase"]["url"]
-SUPABASE_KEY = st.secrets["supabase"]["key"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- Hàm xử lý login ---
-def login(email, password):
-    try:
-        result = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        return result
-    except Exception as e:
-        return None
-
-# --- Hàm xử lý logout ---
-def logout():
-    st.session_state["logged_in"] = False
-    st.session_state["user"] = None
-
-# --- Kiểm tra trạng thái đăng nhập ---
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-    st.session_state["user"] = None
-
-# --- Nếu chưa login thì hiển thị form login ---
-if not st.session_state["logged_in"]:
-    st.title("🔑 Đăng nhập vào hệ thống")
-
-    email = st.text_input("Email")
-    password = st.text_input("Mật khẩu", type="password")
-
-    if st.button("Đăng nhập"):
-        user = login(email, password)
-        if user and user.user:
-            st.session_state["logged_in"] = True
-            st.session_state["user"] = user.user
-            st.success("✅ Đăng nhập thành công!")
-            st.experimental_rerun()
-        else:
-            st.error("❌ Sai email hoặc mật khẩu")
-
-# --- Nếu đã login thì hiển thị giao diện chính ---
-else:
-    # Thanh header với nút đăng xuất
-    col1, col2 = st.columns([6,1])
-    with col1:
-        st.subheader(f"👋 Xin chào, {st.session_state['user'].email}")
-    with col2:
-        if st.button("🚪 Đăng xuất"):
-            logout()
-            st.experimental_rerun()
-
-    st.title("📦 Quản lý đơn hàng")
-    st.write("Đây là giao diện chính của app bạn. Bạn có thể thêm tính năng ở đây...")
-    # TODO: Thêm các phần của app (CRUD orders, thống kê, báo cáo...)
-
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
