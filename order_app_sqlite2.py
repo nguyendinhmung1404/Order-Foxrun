@@ -68,7 +68,6 @@ def row_to_df(records):
 
 def get_orders_df():
     try:
-        res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
         return row_to_df(res.data)
     except Exception as e:
         st.error(f"Lỗi khi lấy danh sách đơn: {e}")
@@ -120,7 +119,6 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
 def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     notes, package_info="",
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
-    """Update an order by id."""
     try:
         total_cny = float(price_cny) * int(quantity)
         deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
@@ -250,7 +248,6 @@ def build_reminders():
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 
-menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
     "Danh sách & Quản lý",
     "Cập nhật / Đánh dấu giao",
@@ -381,7 +378,6 @@ elif menu == "Danh sách & Quản lý":
         if opts:
             sel = st.selectbox("Chọn đơn để Sửa / Xóa", options=opts)
             sel_id = int(sel.split(" - ")[0])
-            sel_row = df[df["id"]==sel_id].iloc[0]
 
             st.subheader("✏️ Sửa đơn")
             with st.form(key=f"edit_form_{sel_id}"):
@@ -425,7 +421,6 @@ elif menu == "Danh sách & Quản lý":
             st.subheader("🗑️ Xóa đơn")
             if st.button("❌ Xóa đơn này"):
                 try:
-                    delete_order_db(sel_id)
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
@@ -509,7 +504,6 @@ elif menu == "Thống kê & Xuất":
         show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
                      "delivered_date","delta_days","status","notes","package_info"]
         show_cols = [c for c in show_cols if c in df_display.columns]
-        st.dataframe(df_display[show_cols], use_container_width=True)
 
         if st.button("Xuất toàn bộ báo cáo (Excel)"):
             bytes_xlsx = export_df_to_excel_bytes(df_display)
