@@ -344,9 +344,12 @@ elif menu == "Danh sách & Quản lý":
         chosen = st.multiselect("Lọc theo trạng thái", options=all_status, default=all_status)
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
 
-        display = format_df_for_display(filtered)
+                display = format_df_for_display(filtered).reset_index(drop=True)
+        # Thêm cột STT (số thứ tự)
+        display.insert(0, "STT", range(1, len(display) + 1))
+
         show_cols = [
-            "id","order_code","name","quantity","price_cny","total_cny",
+            "STT","order_code","name","quantity","price_cny","total_cny",
             "deposit_amount","deposit_ratio","start_date","lead_time",
             "expected_date","delivered_date","status","delta_days",
             "notes","package_info"
@@ -355,7 +358,7 @@ elif menu == "Danh sách & Quản lý":
 
         # 🔑 ĐỔI TÊN CỘT SANG TIẾNG VIỆT
         vietnamese_cols = {
-            "id": "STT",
+            "STT": "STT",
             "order_code": "Mã đơn",
             "name": "Tên khách",
             "quantity": "Số lượng",
@@ -375,6 +378,7 @@ elif menu == "Danh sách & Quản lý":
 
         display_renamed = display[show_cols].rename(columns=vietnamese_cols)
         st.dataframe(display_renamed, use_container_width=True)
+
 
         # ------ Chọn đơn để sửa / xóa ------
         opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
@@ -504,9 +508,11 @@ elif menu == "Thống kê & Xuất":
         st.pyplot(fig)
 
         # Hiển thị chi tiết và xuất
-        df_display = format_df_for_display(df)
-        st.subheader("Chi tiết đơn hàng")
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
+                st.subheader("Chi tiết đơn hàng")
+        df_display = df_display.reset_index(drop=True)
+        # Thêm cột STT
+        df_display.insert(0, "STT", range(1, len(df_display) + 1))
+        show_cols = ["STT","order_code","name","start_date","lead_time","expected_date",
                      "delivered_date","delta_days","status","notes","package_info"]
         show_cols = [c for c in show_cols if c in df_display.columns]
         st.dataframe(df_display[show_cols], use_container_width=True)
