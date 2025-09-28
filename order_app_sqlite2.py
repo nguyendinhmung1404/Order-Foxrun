@@ -271,9 +271,12 @@ if "user" not in st.session_state:
         submit = st.form_submit_button("Đăng nhập")
     if submit:
         try:
-            res = supabase.auth.sign_in_with_password(
-                {"email": email, "password": password}
-            )
+            # ✅ Cú pháp chuẩn
+res = supabase.auth.sign_in_with_password({
+    "email": email,
+    "password": password
+})
+
             user = res.user
             st.session_state["user"] = user
             st.session_state["user_email"] = user.email
