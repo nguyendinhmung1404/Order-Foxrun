@@ -254,7 +254,7 @@ def build_reminders():
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 from supabase import create_client
-```python
+
 import streamlit as st
 from supabase import create_client
 
