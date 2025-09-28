@@ -524,10 +524,10 @@ import pytz
 from datetime import date
 tz = pytz.timezone("Asia/Bangkok")  # ✅ Múi giờ +7
 
-min_date = df_display["start_date"].min()
-max_date = df_display["start_date"].max()
+min_date = df["start_date"].min()
+max_date = df["start_date"].max()
 # Đảm bảo dữ liệu kiểu ngày
-df_display["start_date"] = pd.to_datetime(df_display["start_date"], errors="coerce")
+df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
 
 start_filter = col_from.date_input(
     "Từ ngày",
