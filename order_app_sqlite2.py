@@ -500,12 +500,17 @@ elif menu == "Thống kê & Xuất":
         c3.metric("Đang sản xuất", int(pending))
         c4.metric("Giao trễ", int(late))
 
-        labels = ["Đúng hẹn", "Trễ", "Sớm", "Chưa giao"]
-        counts = [on_time, late, early, pending]
-        fig, ax = plt.subplots()
-        ax.pie(counts, labels=labels, autopct="%1.1f%%", startangle=90)
-        ax.axis("equal")
-        st.pyplot(fig)
+        # 🔵 Biểu đồ tròn — dùng dữ liệu đã lọc (df_export)
+        st.subheader("Tỉ lệ giao hàng (theo khoảng ngày đặt hàng đã chọn)")
+        if df_export.empty or "delivery_status" not in df_export.columns:
+            st.info("Không có dữ liệu để vẽ biểu đồ.")
+        else:
+            stats = df_export["delivery_status"].value_counts()
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
+            ax.axis("equal")
+            st.pyplot(fig)
 
         # Hiển thị chi tiết và xuất
         df_display = format_df_for_display(df)
@@ -555,6 +560,33 @@ elif menu == "Thống kê & Xuất":
         # Lọc theo khoảng start_filter ≤ start_date_bk ≤ end_filter
         mask = df["start_date_bk"].apply(lambda d: (d is not None) and (start_filter <= d <= end_filter))
         df_export = df[mask].copy()
+                # --- Tạo cột delivery_status (Đúng hẹn / Trễ / Sớm / Chưa giao) cho df_export ---
+        if not df_export.empty:
+            # chuẩn hoá ngày
+            df_export["expected_date"] = pd.to_datetime(df_export.get("expected_date"), errors="coerce")
+            df_export["delivered_date"] = pd.to_datetime(df_export.get("delivered_date"), errors="coerce")
+
+            def _classify_delivery(row):
+                if pd.isna(row["delivered_date"]):
+                    return "Chưa giao"
+                if pd.isna(row["expected_date"]):
+                    return "Không có hẹn"
+                try:
+                    delta = (row["delivered_date"].date() - row["expected_date"].date()).days
+                except Exception:
+                    return "Không có hẹn"
+                if delta == 0:
+                    return "Đúng hẹn"
+                elif delta > 0:
+                    return "Trễ"
+                else:
+                    return "Sớm"
+
+            df_export["delivery_status"] = df_export.apply(_classify_delivery, axis=1)
+        else:
+            # đảm bảo cột tồn tại ngay cả khi rỗng
+            df_export["delivery_status"] = pd.Series(dtype="object")
+
 
         # Chuẩn bị DataFrame để xuất (convert ngày thành chuỗi cho file Excel)
         df_export_display = format_df_for_display(df_export)
