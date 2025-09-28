@@ -280,7 +280,11 @@ if choice == "Đăng nhập":
             if response.user:
                 st.session_state["user"] = response.user
                 st.success(f"🎉 Chào mừng {email} quay lại!")
-                st.experimental_rerun()  # reload lại app để hiển thị menu
+                try:  
+                     st.rerun()
+                except AttributeError:
+                     st.experimental_rerun()
+                    
             else:
                 st.error("❌ Sai tài khoản hoặc mật khẩu!")
         except Exception as e:
