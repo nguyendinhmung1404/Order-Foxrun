@@ -61,7 +61,7 @@ def row_to_df(records):
     if not records:
         return pd.DataFrame()
     df = pd.DataFrame(records)
-    for c in ["start_date", "expected_date", "delivered_date", "created_at"]:
+    for c in ["start_date", "start_date", "delivered_date", "created_at"]:
         if c in df.columns:
             df[c] = pd.to_datetime(df[c], errors="coerce")
     return df
@@ -99,7 +99,7 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
             "name": name,
             "start_date": start_date_str,
             "lead_time": int(lead_time_int) if lead_time_int is not None else None,
-            "expected_date": expected,
+            "start_date": expected,
             "delivered_date": None,
             "status": "Đang sản xuất",
             "notes": notes,
@@ -138,7 +138,7 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
             "name": name,
             "start_date": start_date_str,
             "lead_time": int(lead_time_int) if lead_time_int is not None else None,
-            "expected_date": expected,
+            "start_date": expected,
             "notes": notes,
             "package_info": package_info,
             "quantity": int(quantity),
@@ -161,10 +161,10 @@ def delete_order_db(order_id):
 
 def mark_delivered_db(order_id, delivered_date_str):
     try:
-        r = supabase.table(DB_TABLE).select("expected_date").eq("id", int(order_id)).single().execute()
-        if not r.data or r.data.get("expected_date") is None:
+        r = supabase.table(DB_TABLE).select("start_date").eq("id", int(order_id)).single().execute()
+        if not r.data or r.data.get("start_date") is None:
             return False, "Không tìm thấy ngày dự kiến."
-        expected = pd.to_datetime(r.data.get("expected_date")).date()
+        expected = pd.to_datetime(r.data.get("start_date")).date()
         delivered = datetime.strptime(delivered_date_str, "%Y-%m-%d").date()
         delta = (delivered - expected).days
         if delta == 0:
@@ -198,7 +198,7 @@ def build_reminders():
         return msgs
 
     # parse expected/delivered thành Timestamp (coerce errors)
-    df["expected_date"] = pd.to_datetime(df.get("expected_date"), errors="coerce")
+    df["start_date"] = pd.to_datetime(df.get("start_date"), errors="coerce")
     df["delivered_date"] = pd.to_datetime(df.get("delivered_date"), errors="coerce")
 
     # helper: chuyển 1 Timestamp (có thể tz-aware hoặc naive) -> python.date (strip tz + time)
@@ -225,14 +225,14 @@ def build_reminders():
                 return None
 
     # tạo cột date-only để so sánh chính xác
-    df["expected_date_only"] = df["expected_date"].apply(_to_date_only)
+    df["start_date_only"] = df["start_date"].apply(_to_date_only)
     df["delivered_date_only"] = df["delivered_date"].apply(_to_date_only)
 
     # lọc các đơn chưa xác nhận giao
     df_pending = df[df["delivered_date_only"].isna()]
 
     for _, row in df_pending.iterrows():
-        exp_date = row.get("expected_date_only")
+        exp_date = row.get("start_date_only")
         if not exp_date:
             continue
         days_left = (exp_date - today).days 
@@ -351,7 +351,7 @@ elif menu == "Danh sách & Quản lý":
         show_cols = [
             "id","order_code","name","quantity","price_cny","total_cny",
             "deposit_amount","deposit_ratio","start_date","lead_time",
-            "expected_date","delivered_date","status","delta_days",
+            "start_date","delivered_date","status","delta_days",
             "notes","package_info"
         ]
         show_cols = [c for c in show_cols if c in display.columns]
@@ -368,7 +368,7 @@ elif menu == "Danh sách & Quản lý":
             "deposit_ratio": "Đặt cọc (%)",
             "start_date": "Ngày bắt đầu",
             "lead_time": "Số ngày SX",
-            "expected_date": "Ngày dự kiến giao",
+            "start_date": "Ngày dự kiến giao",
             "delivered_date": "Ngày giao thực tế",
             "status": "Trạng thái",
             "delta_days": "Chênh lệch ngày",
@@ -443,7 +443,7 @@ elif menu == "Cập nhật / Đánh dấu giao":
     if pending.empty:
         st.info("Không có đơn chờ giao (tất cả đã có ngày giao).")
     else:
-        opts = [f"{row['id']} - {row['name']} (dự kiến {pd.to_datetime(row['expected_date']).strftime('%Y-%m-%d') if not pd.isna(row.get('expected_date')) else '??'})" for _, row in pending.iterrows()]
+        opts = [f"{row['id']} - {row['name']} (dự kiến {pd.to_datetime(row['start_date']).strftime('%Y-%m-%d') if not pd.isna(row.get('start_date')) else '??'})" for _, row in pending.iterrows()]
         sel = st.selectbox("Chọn đơn để cập nhật ngày giao", opts)
         sel_id = int(sel.split(" - ")[0])
         default_date = date.today()
@@ -468,11 +468,11 @@ elif menu == "Nhắc nhở (Reminders)":
             st.write("-", m)
         if st.button("Xuất danh sách nhắc (Excel)"):
             df_all = get_orders_df()
-            if not df_all.empty and "expected_date" in df_all.columns:
-                df_all['expected_date'] = pd.to_datetime(df_all['expected_date'], errors='coerce')
+            if not df_all.empty and "start_date" in df_all.columns:
+                df_all['start_date'] = pd.to_datetime(df_all['start_date'], errors='coerce')
                 df_pending = df_all[df_all['delivered_date'].isna()] if "delivered_date" in df_all.columns else df_all.copy()
                 today = date.today()
-                df_pending['days_left'] = df_pending['expected_date'].dt.date.apply(lambda d: (d - today).days)
+                df_pending['days_left'] = df_pending['start_date'].dt.date.apply(lambda d: (d - today).days)
                 df_remind = df_pending[df_pending['days_left'].isin(REMINDER_DAYS + [0]) | (df_pending['days_left'] < 0)]
             else:
                 df_remind = pd.DataFrame()
@@ -549,7 +549,7 @@ elif menu == "
         # Hiển thị chi tiết và xuất
         df_display = format_df_for_display(df)
         st.subheader("Chi tiết đơn hàng")
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
+        show_cols = ["id","order_code","name","start_date","lead_time","start_date",
                      "delivered_date","delta_days","status","notes","package_info"]
         show_cols = [c for c in show_cols if c in df_display.columns]
         st.dataframe(df_display[show_cols], use_container_width=True)
