@@ -257,9 +257,12 @@ from supabase import create_client
 import streamlit as st
 
 # Kết nối Supabase
-url = "https://abcxyz.supabase.co"  # Thay bằng URL project của bạn
-key = "eyJhbGciOi..."                # Thay bằng anon key của bạn
-supabase = create_client(url, key)
+from supabase import create_client, Client
+
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Giao diện đăng nhập / đăng ký
 st.sidebar.title("🔐 Đăng nhập hệ thống")
