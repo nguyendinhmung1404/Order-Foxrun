@@ -248,11 +248,11 @@ def build_reminders():
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 
-    "Thêm đơn mới",
-    "Danh sách & Quản lý",
-    "Cập nhật / Đánh dấu giao",
-    "Nhắc nhở (Reminders)",
-    "Thống kê & Xuất"
+"Thêm đơn mới",
+"Danh sách & Quản lý",
+"Cập nhật / Đánh dấu giao",
+"Nhắc nhở (Reminders)",
+"Thống kê & Xuất"
 ])
 
 # --- Flash message placeholder ---
