@@ -487,53 +487,18 @@ elif menu == "Thống kê & Xuất":
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
-        total = len(df)
-        delivered_mask = df['delivered_date'].notna() if "delivered_date" in df.columns else pd.Series([], dtype=bool)
-        pending = int(df['delivered_date'].isna().sum()) if "delivered_date" in df.columns else total
-        on_time = df[delivered_mask & df['status'].str.contains("Đã giao đúng hẹn", na=False)].shape[0] if "status" in df.columns else 0
-        late = df[delivered_mask & df['status'].str.contains("trễ", na=False)].shape[0] if "status" in df.columns else 0
-        early = df[delivered_mask & df['status'].str.contains("sớm", na=False)].shape[0] if "status" in df.columns else 0
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Tổng đơn", total)
-        c2.metric("Đã giao", int(delivered_mask.sum()) if hasattr(delivered_mask, "sum") else 0)
-        c3.metric("Đang sản xuất", int(pending))
-        c4.metric("Giao trễ", int(late))
-
-        # 🔵 Biểu đồ tròn — dùng dữ liệu đã lọc (df_export)
-        st.subheader("Tỉ lệ giao hàng (theo khoảng ngày đặt hàng đã chọn)")
-        if df_export.empty or "delivery_status" not in df_export.columns:
-            st.info("Không có dữ liệu để vẽ biểu đồ.")
-        else:
-            stats = df_export["delivery_status"].value_counts()
-            import matplotlib.pyplot as plt
-            fig, ax = plt.subplots()
-            ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
-            ax.axis("equal")
-            st.pyplot(fig)
-
-        # Hiển thị chi tiết và xuất
-        df_display = format_df_for_display(df)
-        st.subheader("Chi tiết đơn hàng")
-        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
-                     "delivered_date","delta_days","status","notes","package_info"]
-        show_cols = [c for c in show_cols if c in df_display.columns]
-        st.dataframe(df_display[show_cols], use_container_width=True)
-
-                # --- Bộ lọc thời gian theo "start_date" (ngày đặt hàng) theo múi giờ Asia/Bangkok (+7) ---
-        # Chuẩn hóa cột start_date từ df (không dùng df_display vì df_display chuyển thành string)
+        # --- Bộ lọc thời gian theo "start_date" (ngày đặt hàng) ---
+        # Chuẩn hóa cột start_date từ df (không dùng df_display vì df_display đã chuyển sang string)
         df["start_date"] = pd.to_datetime(df.get("start_date"), errors="coerce")
 
-        # Helper: chuyển timestamp (có thể tz-aware hoặc naive) -> date theo múi giờ Asia/Bangkok
+        # Helper: chuyển timestamp -> date theo múi giờ Asia/Bangkok
         def _to_bangkok_date(ts):
             if pd.isna(ts):
                 return None
             try:
                 t = pd.Timestamp(ts)
-                # nếu ts chưa có tz, giả sử lưu ở UTC => localize rồi convert
                 if t.tz is None:
                     t = t.tz_localize("UTC")
-                # convert sang Bangkok
                 t = t.tz_convert("Asia/Bangkok")
                 return t.date()
             except Exception:
@@ -544,7 +509,7 @@ elif menu == "Thống kê & Xuất":
 
         df["start_date_bk"] = df["start_date"].apply(_to_bangkok_date)
 
-        # Lấy giá trị mặc định cho date_input
+        # Lấy giá trị mặc định cho bộ lọc
         min_date = df["start_date_bk"].min()
         max_date = df["start_date_bk"].max()
         if pd.isna(min_date):
@@ -552,17 +517,17 @@ elif menu == "Thống kê & Xuất":
         if pd.isna(max_date):
             max_date = date.today()
 
-        st.subheader("📅 Bộ lọc thời gian xuất báo cáo (theo ngày đặt hàng, múi giờ +7)")
+        st.subheader("📅 Bộ lọc thời gian (ngày đặt hàng, múi giờ +7)")
         col_from, col_to = st.columns(2)
         start_filter = col_from.date_input("Từ ngày", value=min_date)
         end_filter = col_to.date_input("Đến ngày", value=max_date)
 
-        # Lọc theo khoảng start_filter ≤ start_date_bk ≤ end_filter
+        # Lọc dữ liệu
         mask = df["start_date_bk"].apply(lambda d: (d is not None) and (start_filter <= d <= end_filter))
         df_export = df[mask].copy()
-                # --- Tạo cột delivery_status (Đúng hẹn / Trễ / Sớm / Chưa giao) cho df_export ---
+
+        # --- Tạo cột delivery_status (Đúng hẹn / Trễ / Sớm / Chưa giao) ---
         if not df_export.empty:
-            # chuẩn hoá ngày
             df_export["expected_date"] = pd.to_datetime(df_export.get("expected_date"), errors="coerce")
             df_export["delivered_date"] = pd.to_datetime(df_export.get("delivered_date"), errors="coerce")
 
@@ -584,14 +549,42 @@ elif menu == "Thống kê & Xuất":
 
             df_export["delivery_status"] = df_export.apply(_classify_delivery, axis=1)
         else:
-            # đảm bảo cột tồn tại ngay cả khi rỗng
             df_export["delivery_status"] = pd.Series(dtype="object")
 
+        # --- Metrics tổng quan dựa trên dữ liệu đã lọc ---
+        total = len(df_export)
+        delivered_mask = df_export["delivered_date"].notna() if "delivered_date" in df_export.columns else pd.Series([], dtype=bool)
+        pending = int(df_export["delivered_date"].isna().sum()) if "delivered_date" in df_export.columns else total
+        on_time = df_export[delivered_mask & df_export["status"].str.contains("Đã giao đúng hẹn", na=False)].shape[0] if "status" in df_export.columns else 0
+        late = df_export[delivered_mask & df_export["status"].str.contains("trễ", na=False)].shape[0] if "status" in df_export.columns else 0
+        early = df_export[delivered_mask & df_export["status"].str.contains("sớm", na=False)].shape[0] if "status" in df_export.columns else 0
 
-        # Chuẩn bị DataFrame để xuất (convert ngày thành chuỗi cho file Excel)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Tổng đơn (đã lọc)", total)
+        c2.metric("Đã giao", int(delivered_mask.sum()) if hasattr(delivered_mask, "sum") else 0)
+        c3.metric("Đang sản xuất", int(pending))
+        c4.metric("Giao trễ", int(late))
+
+        # --- Biểu đồ tròn ---
+        st.subheader("📈 Tỉ lệ giao hàng (theo dữ liệu đã lọc)")
+        if df_export.empty or "delivery_status" not in df_export.columns:
+            st.info("Không có dữ liệu để vẽ biểu đồ.")
+        else:
+            stats = df_export["delivery_status"].value_counts()
+            fig, ax = plt.subplots()
+            ax.pie(stats.values, labels=stats.index, autopct="%.1f%%", startangle=90)
+            ax.axis("equal")
+            st.pyplot(fig)
+
+        # --- Bảng chi tiết + Xuất file ---
         df_export_display = format_df_for_display(df_export)
+        st.subheader("📜 Chi tiết đơn hàng (đã lọc)")
+        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
+                     "delivered_date","delta_days","status","notes","package_info"]
+        show_cols = [c for c in show_cols if c in df_export_display.columns]
+        st.dataframe(df_export_display[show_cols], use_container_width=True)
 
-        st.info(f"📊 Đang chọn từ **{start_filter}** đến **{end_filter}** → {len(df_export)} đơn hàng để xuất.")
+        st.info(f"📊 Đang chọn từ **{start_filter}** đến **{end_filter}** → {len(df_export)} đơn hàng.")
 
         if st.button("📥 Xuất báo cáo đã lọc"):
             bytes_xlsx = export_df_to_excel_bytes(df_export_display)
@@ -602,6 +595,5 @@ elif menu == "Thống kê & Xuất":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-        # Ghi chú cuối (cùng cấp indent)
-        st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
-        
+        # Ghi chú cuối
+        st.info("💡 Bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
