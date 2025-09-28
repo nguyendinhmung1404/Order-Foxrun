@@ -36,7 +36,10 @@ def export_df_to_excel_bytes(df):
     return output.getvalue()
 
 # supabase client
-from supabase import Client, create_client  # vẫn gọi create_client nhưng chuẩn v2
+try:
+    from supabase import create_client
+except Exception as e:
+    raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
 # -------------------------
 # Cấu hình Supabase
@@ -47,9 +50,7 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY.")
 
-# Tạo client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 DB_TABLE = "orders"
 REMINDER_RANGE = 7  # số ngày trước hạn cần nhắc liên tục
@@ -252,6 +253,38 @@ def build_reminders():
 # -------------------------
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
+from supabase import create_client
+import streamlit as st
+
+# Kết nối Supabase
+url = "https://abcxyz.supabase.co"  # Thay bằng URL project của bạn
+key = "eyJhbGciOi..."                # Thay bằng anon key của bạn
+supabase = create_client(url, key)
+
+# Giao diện đăng nhập / đăng ký
+st.sidebar.title("🔐 Đăng nhập hệ thống")
+
+# Nếu chưa có tài khoản → cho phép đăng ký
+choice = st.sidebar.radio("Lựa chọn:", ["Đăng nhập", "Đăng ký"])
+
+email = st.sidebar.text_input("Email")
+password = st.sidebar.text_input("Mật khẩu", type="password")
+
+if choice == "Đăng nhập":
+    if st.sidebar.button("Đăng nhập"):
+        try:
+            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            st.session_state["user"] = user.user
+            st.success(f"Chào mừng {email} 🎉")
+        except Exception as e:
+            st.error("Sai tài khoản hoặc mật khẩu!")
+elif choice == "Đăng ký":
+    if st.sidebar.button("Tạo tài khoản"):
+        try:
+            supabase.auth.sign_up({"email": email, "password": password})
+            st.success("Đăng ký thành công! Vui lòng đăng nhập.")
+        except Exception as e:
+            st.error("Email đã tồn tại hoặc không hợp lệ.")
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
