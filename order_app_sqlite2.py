@@ -556,5 +556,5 @@ if st.button("📥 Xuất báo cáo đã lọc"):
         file_name=f"bao_cao_{start_filter}_den_{end_filter}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-        st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
+st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
 
