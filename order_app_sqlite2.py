@@ -343,7 +343,7 @@ elif menu == "Danh sách & Quản lý":
         all_status = filtered['status'].fillna("Chưa xác định").unique().tolist()
         chosen = st.multiselect("Lọc theo trạng thái", options=all_status, default=all_status)
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
-display = format_df_for_display(filtered).reset_index(drop=True)
+        display = format_df_for_display(filtered).reset_index(drop=True)
 
         # Thêm cột STT (số thứ tự)
         display.insert(0, "STT", range(1, len(display) + 1))
