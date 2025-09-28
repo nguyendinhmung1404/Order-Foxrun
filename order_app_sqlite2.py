@@ -254,49 +254,66 @@ def build_reminders():
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 from supabase import create_client
+```python
 import streamlit as st
+from supabase import create_client
 
-# Kết nối Supabase
-from supabase import create_client, Client
+# --- Supabase config ---
+SUPABASE_URL = st.secrets["supabase"]["url"]
+SUPABASE_KEY = st.secrets["supabase"]["key"]
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+# --- Hàm xử lý login ---
+def login(email, password):
+    try:
+        result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        return result
+    except Exception as e:
+        return None
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# --- Hàm xử lý logout ---
+def logout():
+    st.session_state["logged_in"] = False
+    st.session_state["user"] = None
 
-# Giao diện đăng nhập / đăng ký
-st.sidebar.title("🔐 Đăng nhập hệ thống")
+# --- Kiểm tra trạng thái đăng nhập ---
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+    st.session_state["user"] = None
 
-# Nếu chưa có tài khoản → cho phép đăng ký
-choice = st.sidebar.radio("Lựa chọn:", ["Đăng nhập", "Đăng ký"])
+# --- Nếu chưa login thì hiển thị form login ---
+if not st.session_state["logged_in"]:
+    st.title("🔑 Đăng nhập vào hệ thống")
 
-email = st.sidebar.text_input("Email")
-password = st.sidebar.text_input("Mật khẩu", type="password")
+    email = st.text_input("Email")
+    password = st.text_input("Mật khẩu", type="password")
 
-if choice == "Đăng nhập":
-    if st.sidebar.button("Đăng nhập"):
-        try:
-            response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if response.user:
-                st.session_state["user"] = response.user
-                st.success(f"🎉 Chào mừng {email} quay lại!")
-                try:  
-                     st.rerun()
-                except AttributeError:
-                     st.experimental_rerun()
-                    
-            else:
-                st.error("❌ Sai tài khoản hoặc mật khẩu!")
-        except Exception as e:
-            st.error(f"Đăng nhập thất bại: {str(e)}")
+    if st.button("Đăng nhập"):
+        user = login(email, password)
+        if user and user.user:
+            st.session_state["logged_in"] = True
+            st.session_state["user"] = user.user
+            st.success("✅ Đăng nhập thành công!")
+            st.experimental_rerun()
+        else:
+            st.error("❌ Sai email hoặc mật khẩu")
 
-elif choice == "Đăng ký":
-    if st.sidebar.button("Tạo tài khoản"):
-        try:
-            supabase.auth.sign_up({"email": email, "password": password})
-            st.success("Đăng ký thành công! Vui lòng đăng nhập.")
-        except Exception as e:
-            st.error("Email đã tồn tại hoặc không hợp lệ.")
+# --- Nếu đã login thì hiển thị giao diện chính ---
+else:
+    # Thanh header với nút đăng xuất
+    col1, col2 = st.columns([6,1])
+    with col1:
+        st.subheader(f"👋 Xin chào, {st.session_state['user'].email}")
+    with col2:
+        if st.button("🚪 Đăng xuất"):
+            logout()
+            st.experimental_rerun()
+
+    st.title("📦 Quản lý đơn hàng")
+    st.write("Đây là giao diện chính của app bạn. Bạn có thể thêm tính năng ở đây...")
+    # TODO: Thêm các phần của app (CRUD orders, thống kê, báo cáo...)
+```
+
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
