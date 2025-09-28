@@ -189,7 +189,10 @@ def build_reminders():
     - Nhắc cả các đơn đã quá hạn chưa giao, kèm số ngày trễ.
     """
     df = get_orders_df()
-    today = date.today()
+    from datetime import datetime, timedelta, timezone
+    VN_TZ = timezone(timedelta(hours=7))
+    today = datetime.now(VN_TZ).date()
+
     msgs = []
     if df is None or df.empty:
         return msgs
