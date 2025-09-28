@@ -68,6 +68,7 @@ def row_to_df(records):
 
 def get_orders_df():
     try:
+        res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
         return row_to_df(res.data)
     except Exception as e:
         st.error(f"Lỗi khi lấy danh sách đơn: {e}")
@@ -116,9 +117,10 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
         raise RuntimeError(f"Supabase insert error: {e}")
 
 
-def update_order_db(old_order_code, order_code, name, start_date_str, lead_time_int,
+def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     notes, package_info="",
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
+    """Update an order by id."""
     try:
         total_cny = float(price_cny) * int(quantity)
         deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
@@ -145,21 +147,21 @@ def update_order_db(old_order_code, order_code, name, start_date_str, lead_time_
             "deposit_amount": float(deposit_amount),
             "deposit_ratio": deposit_ratio
         }
-        res = supabase.table(DB_TABLE).update(payload).eq("order_code", old_order_code).execute()
+        res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
         return res.data
     except Exception as e:
         raise RuntimeError(f"Supabase update error: {e}")
 
-def delete_order_db(order_code):
+def delete_order_db(order_id):
     try:
-        res = supabase.table(DB_TABLE).delete().eq("order_code", old_order_code).execute()
+        res = supabase.table(DB_TABLE).delete().eq("id", int(order_id)).execute()
         return res.data
     except Exception as e:
         raise RuntimeError(f"Lỗi delete: {e}")
 
-def mark_delivered_db(order_code, delivered_date_str):
+def mark_delivered_db(order_id, delivered_date_str):
     try:
-        r = supabase.table(DB_TABLE).select("expected_date").eq("order_code", old_order_code).single().execute()
+        r = supabase.table(DB_TABLE).select("expected_date").eq("id", int(order_id)).single().execute()
         if not r.data or r.data.get("expected_date") is None:
             return False, "Không tìm thấy ngày dự kiến."
         expected = pd.to_datetime(r.data.get("expected_date")).date()
@@ -172,7 +174,7 @@ def mark_delivered_db(order_code, delivered_date_str):
         else:
             status = f"⏱️ Sớm {-delta} ngày"
         payload = {"delivered_date": delivered_date_str, "status": status}
-        supabase.table(DB_TABLE).update(payload).eq("order_code", old_order_code).execute()
+        supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
         return True, status
     except Exception as e:
         return False, f"Lỗi mark delivered: {e}"
@@ -233,11 +235,11 @@ def build_reminders():
         days_left = (exp_date - today).days - 1
 
         if days_left < 0:
-            msgs.append(f"⚠️ Đơn **{row.get('name')}** (ID:{row.get('order_code')}) đã trễ **{-days_left} ngày** — dự kiến: {exp_date}")
+            msgs.append(f"⚠️ Đơn **{row.get('name')}** (ID:{row.get('id')}) đã trễ **{-days_left} ngày** — dự kiến: {exp_date}")
         elif days_left == 0:
-            msgs.append(f"🚨 Đơn **{row.get('name')}** (ID:{row.get('order_code')}) đến hạn **HÔM NAY** ({exp_date})")
+            msgs.append(f"🚨 Đơn **{row.get('name')}** (ID:{row.get('id')}) đến hạn **HÔM NAY** ({exp_date})")
         elif 0 < days_left <= 7:
-            msgs.append(f"🔔 Còn **{days_left} ngày** đến hạn đơn **{row.get('name')}** (ID:{row.get('order_code')}) — dự kiến: {exp_date}")
+            msgs.append(f"🔔 Còn **{days_left} ngày** đến hạn đơn **{row.get('name')}** (ID:{row.get('id')}) — dự kiến: {exp_date}")
         # nếu >7 ngày thì không nhắc
 
     return msgs
@@ -248,7 +250,7 @@ def build_reminders():
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
 st.title("📦 Quản lý Đơn hàng Foxrun")
 
-menu = st.sidebar.selectbox("Chọn mục", [
+menu = st.sidebar.selectbox("Chọn chức năng", [
     "Thêm đơn mới",
     "Danh sách & Quản lý",
     "Cập nhật / Đánh dấu giao",
@@ -342,10 +344,9 @@ elif menu == "Danh sách & Quản lý":
         chosen = st.multiselect("Lọc theo trạng thái", options=all_status, default=all_status)
         filtered = filtered[filtered['status'].fillna("Chưa xác định").isin(chosen)]
 
-        display = format_df_for_display(filtered).reset_index(drop=True)
-        display.insert(0, "STT", range(1, len(display) + 1))
+        display = format_df_for_display(filtered)
         show_cols = [
-            "STT","order_code","name","quantity","price_cny","total_cny",
+            "id","order_code","name","quantity","price_cny","total_cny",
             "deposit_amount","deposit_ratio","start_date","lead_time",
             "expected_date","delivered_date","status","delta_days",
             "notes","package_info"
@@ -354,8 +355,8 @@ elif menu == "Danh sách & Quản lý":
 
         # 🔑 ĐỔI TÊN CỘT SANG TIẾNG VIỆT
         vietnamese_cols = {
-            "STT": "STT",
-                        "order_code": "Mã đơn",
+            "id": "STT",
+            "order_code": "Mã đơn",
             "name": "Tên khách",
             "quantity": "Số lượng",
             "price_cny": "Giá nhập (CNY)",
@@ -376,13 +377,14 @@ elif menu == "Danh sách & Quản lý":
         st.dataframe(display_renamed, use_container_width=True)
 
         # ------ Chọn đơn để sửa / xóa ------
-        opts = [f"{row['order_code']} - {row['name']}" for _, row in filtered.iterrows()]
+        opts = [f"{row['id']} - {row['name']}" for _, row in filtered.iterrows()]
         if opts:
             sel = st.selectbox("Chọn đơn để Sửa / Xóa", options=opts)
-            sel_code = sel.split(" - ")[0]
+            sel_id = int(sel.split(" - ")[0])
+            sel_row = df[df["id"]==sel_id].iloc[0]
 
             st.subheader("✏️ Sửa đơn")
-            with st.form(key=f"edit_form_{sel_code}"):
+            with st.form(key=f"edit_form_{sel_id}"):
                 new_code = st.text_input("Mã đơn", sel_row.get("order_code",""))
                 new_name = st.text_input("Tên KH - SP", sel_row.get("name",""))
                 try:
@@ -407,7 +409,7 @@ elif menu == "Danh sách & Quản lý":
                 if save:
                     try:
                         update_order_db(
-                            sel_code,
+                            sel_id,
                             (new_code or "").strip(),
                             (new_name or "").strip(),
                             new_start.strftime("%Y-%m-%d"),
@@ -423,6 +425,7 @@ elif menu == "Danh sách & Quản lý":
             st.subheader("🗑️ Xóa đơn")
             if st.button("❌ Xóa đơn này"):
                 try:
+                    delete_order_db(sel_id)
                     st.success("🗑️ Đã xóa đơn.")
                 except Exception as e:
                     st.error(f"❌ Lỗi khi xóa: {e}")
@@ -437,13 +440,13 @@ elif menu == "Cập nhật / Đánh dấu giao":
     if pending.empty:
         st.info("Không có đơn chờ giao (tất cả đã có ngày giao).")
     else:
-        opts = [f"{row['order_code']} - {row['name']} (dự kiến {pd.to_datetime(row['expected_date']).strftime('%Y-%m-%d') if not pd.isna(row.get('expected_date')) else '??'})" for _, row in pending.iterrows()]
+        opts = [f"{row['id']} - {row['name']} (dự kiến {pd.to_datetime(row['expected_date']).strftime('%Y-%m-%d') if not pd.isna(row.get('expected_date')) else '??'})" for _, row in pending.iterrows()]
         sel = st.selectbox("Chọn đơn để cập nhật ngày giao", opts)
-        sel_code = sel.split(" - ")[0]
+        sel_id = int(sel.split(" - ")[0])
         default_date = date.today()
         delivered = st.date_input("Ngày giao thực tế", default_date)
         if st.button("Xác nhận đã giao"):
-            ok, msg = mark_delivered_db(sel_code, delivered.strftime("%Y-%m-%d"))
+            ok, msg = mark_delivered_db(sel_id, delivered.strftime("%Y-%m-%d"))
             if ok:
                 st.success(f"✅ {msg}")
             else:
@@ -503,12 +506,14 @@ elif menu == "Thống kê & Xuất":
         # Hiển thị chi tiết và xuất
         df_display = format_df_for_display(df)
         st.subheader("Chi tiết đơn hàng")
-        show_cols = ["STT","order_code","name","start_date","lead_time","expected_date",
+        show_cols = ["id","order_code","name","start_date","lead_time","expected_date",
                      "delivered_date","delta_days","status","notes","package_info"]
         show_cols = [c for c in show_cols if c in df_display.columns]
+        st.dataframe(df_display[show_cols], use_container_width=True)
 
         if st.button("Xuất toàn bộ báo cáo (Excel)"):
             bytes_xlsx = export_df_to_excel_bytes(df_display)
             st.download_button("📥 Tải báo cáo.xlsx", data=bytes_xlsx, file_name="bao_cao_don_hang.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
+
