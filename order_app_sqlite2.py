@@ -312,7 +312,6 @@ else:
     st.title("📦 Quản lý đơn hàng")
     st.write("Đây là giao diện chính của app bạn. Bạn có thể thêm tính năng ở đây...")
     # TODO: Thêm các phần của app (CRUD orders, thống kê, báo cáo...)
-```
 
 
 menu = st.sidebar.selectbox("Chọn chức năng", [
