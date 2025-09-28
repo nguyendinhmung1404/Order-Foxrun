@@ -273,11 +273,16 @@ password = st.sidebar.text_input("Mật khẩu", type="password")
 if choice == "Đăng nhập":
     if st.sidebar.button("Đăng nhập"):
         try:
-            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            st.session_state["user"] = user.user
-            st.success(f"Chào mừng {email} 🎉")
+            response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            if response.user:
+                st.session_state["user"] = response.user
+                st.success(f"🎉 Chào mừng {email} quay lại!")
+                st.experimental_rerun()  # reload lại app để hiển thị menu
+            else:
+                st.error("❌ Sai tài khoản hoặc mật khẩu!")
         except Exception as e:
-            st.error("Sai tài khoản hoặc mật khẩu!")
+            st.error(f"Đăng nhập thất bại: {str(e)}")
+
 elif choice == "Đăng ký":
     if st.sidebar.button("Tạo tài khoản"):
         try:
