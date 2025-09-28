@@ -252,15 +252,49 @@ def build_reminders():
 # UI
 # -------------------------
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
-st.title("📦 Quản lý Đơn hàng Foxrun")
+# ==============================
+# MAIN APP
+# ==============================
+from supabase import create_client
 
-menu = st.sidebar.selectbox("Chọn chức năng", [
-    "Thêm đơn mới",
-    "Danh sách & Quản lý",
-    "Cập nhật / Đánh dấu giao",
-    "Nhắc nhở (Reminders)",
-    "Thống kê & Xuất"
-])
+# --- Kết nối Supabase ---
+SUPABASE_URL = "https://abcxyz.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI..."  # thay bằng của bạn
+supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+# --- Đăng nhập ---
+if "user" not in st.session_state:
+    st.title("🔑 Đăng nhập hệ thống")
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Mật khẩu", type="password")
+        submit = st.form_submit_button("Đăng nhập")
+    if submit:
+        try:
+            res = supabase.auth.sign_in_with_password(
+                {"email": email, "password": password}
+            )
+            user = res.user
+            st.session_state["user"] = user
+            st.session_state["user_email"] = user.email
+            st.success(f"Đăng nhập thành công: {user.email}")
+            st.rerun()
+        except Exception:
+            st.error("Sai email hoặc mật khẩu!")
+    st.stop()  # ⛔ Dừng app nếu chưa đăng nhập
+
+# --- Nút đăng xuất ---
+if st.button("Đăng xuất"):
+    st.session_state.clear()
+    st.rerun()
+
+# --- Nếu đã đăng nhập thì mới hiển thị menu ---
+st.title("📦 Quản lý đơn hàng")
+menu = st.sidebar.selectbox(
+    "Chọn chức năng",
+    ["🏠 Trang chủ", "📋 Quản lý đơn hàng", "📊 Thống kê & Xuất", "Nhắc nhở (Reminders)"]
+)
+
 
 # --- Flash message placeholder ---
 flash = st.empty()
