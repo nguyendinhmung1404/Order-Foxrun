@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from datetime import datetime, date, timedelta
 from io import BytesIO
 import os
-import pytz
 
 # -------------------------
 # Helpers
@@ -29,7 +28,7 @@ def export_df_to_excel_bytes(df):
     """Xuất DataFrame thành file Excel bytes để tải về"""
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        if df is None:
+        if df is None or df.empty:
             pd.DataFrame().to_excel(writer, index=False, sheet_name="Orders")
         else:
             df.to_excel(writer, index=False, sheet_name="Orders")
@@ -42,13 +41,28 @@ except Exception as e:
     raise RuntimeError("Thiếu package 'supabase'. Cài: pip install supabase") from e
 
 # -------------------------
-# Cấu hình Supabase
+# Cấu hình Supabase (1 chỗ duy nhất)
+# - ưu tiên st.secrets (Streamlit Cloud / .streamlit/secrets.toml)
+# - fallback sang biến môi trường
 # -------------------------
-SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL"))
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
+SUPABASE_URL = None
+SUPABASE_KEY = None
+
+# Nếu dùng Streamlit secrets (recommended)
+try:
+    SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
+except Exception:
+    # Nếu st.secrets chưa sẵn sàng, fallback sang env
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY.")
+    # Không raise quá sớm khi dev: show user-friendly lỗi
+    raise RuntimeError(
+        "Thiếu cấu hình Supabase. Thiết lập SUPABASE_URL và SUPABASE_KEY "
+        "trong .streamlit/secrets.toml hoặc biến môi trường."
+    )
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -70,8 +84,10 @@ def row_to_df(records):
 def get_orders_df():
     try:
         res = supabase.table(DB_TABLE).select("*").order("id", desc=True).execute()
+        # res.data có thể là list of dicts
         return row_to_df(res.data)
     except Exception as e:
+        # Hiển thị lỗi cho dev; return empty DF để UI còn chạy
         st.error(f"Lỗi khi lấy danh sách đơn: {e}")
         return pd.DataFrame()
 
@@ -82,9 +98,11 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
                  quantity=1, price_cny=0.0, deposit_amount=0.0):
     """Insert a new order into Supabase table."""
     try:
-        # Tính toán
-        total_cny = float(price_cny) * int(quantity)
-        deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
+        # đảm bảo số thực (quantity có thể là float)
+        qty = float(quantity)
+        total_cny = float(price_cny) * qty
+        deposit_amount_f = float(deposit_amount)
+        deposit_ratio = (deposit_amount_f / total_cny * 100) if total_cny > 0 else 0.0
 
         expected = None
         if start_date_str:
@@ -106,25 +124,28 @@ def add_order_db(order_code, name, start_date_str, lead_time_int, notes="", pack
             "notes": notes,
             "created_at": created,
             "package_info": package_info,
-            "quantity": int(quantity),
+            "quantity": qty,
             "price_cny": float(price_cny),
             "total_cny": total_cny,
-            "deposit_amount": float(deposit_amount),
+            "deposit_amount": deposit_amount_f,
             "deposit_ratio": deposit_ratio
         }
         res = supabase.table(DB_TABLE).insert(payload).execute()
+        if getattr(res, "error", None):
+            raise RuntimeError(f"Supabase insert error: {res.error}")
         return res.data
     except Exception as e:
         raise RuntimeError(f"Supabase insert error: {e}")
-
 
 def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
                     notes, package_info="",
                     quantity=1, price_cny=0.0, deposit_amount=0.0):
     """Update an order by id."""
     try:
-        total_cny = float(price_cny) * int(quantity)
-        deposit_ratio = (float(deposit_amount) / total_cny * 100) if total_cny > 0 else 0
+        qty = float(quantity)
+        total_cny = float(price_cny) * qty
+        deposit_amount_f = float(deposit_amount)
+        deposit_ratio = (deposit_amount_f / total_cny * 100) if total_cny > 0 else 0.0
 
         expected = None
         if start_date_str:
@@ -142,13 +163,15 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
             "expected_date": expected,
             "notes": notes,
             "package_info": package_info,
-            "quantity": int(quantity),
+            "quantity": qty,
             "price_cny": float(price_cny),
             "total_cny": total_cny,
-            "deposit_amount": float(deposit_amount),
+            "deposit_amount": deposit_amount_f,
             "deposit_ratio": deposit_ratio
         }
         res = supabase.table(DB_TABLE).update(payload).eq("id", int(order_id)).execute()
+        if getattr(res, "error", None):
+            raise RuntimeError(f"Supabase update error: {res.error}")
         return res.data
     except Exception as e:
         raise RuntimeError(f"Supabase update error: {e}")
@@ -156,6 +179,8 @@ def update_order_db(order_id, order_code, name, start_date_str, lead_time_int,
 def delete_order_db(order_id):
     try:
         res = supabase.table(DB_TABLE).delete().eq("id", int(order_id)).execute()
+        if getattr(res, "error", None):
+            raise RuntimeError(f"Supabase delete error: {res.error}")
         return res.data
     except Exception as e:
         raise RuntimeError(f"Lỗi delete: {e}")
@@ -163,6 +188,8 @@ def delete_order_db(order_id):
 def mark_delivered_db(order_id, delivered_date_str):
     try:
         r = supabase.table(DB_TABLE).select("expected_date").eq("id", int(order_id)).single().execute()
+        if getattr(r, "error", None):
+            return False, f"Lỗi lấy dữ liệu: {r.error}"
         if not r.data or r.data.get("expected_date") is None:
             return False, "Không tìm thấy ngày dự kiến."
         expected = pd.to_datetime(r.data.get("expected_date")).date()
@@ -236,58 +263,57 @@ def build_reminders():
         exp_date = row.get("expected_date_only")
         if not exp_date:
             continue
-        days_left = (exp_date - today).days 
+        days_left = (exp_date - today).days
 
         if days_left < 0:
             msgs.append(f"⚠️ Đơn **{row.get('name')}** (ID:{row.get('id')}) đã trễ **{-days_left} ngày** — dự kiến: {exp_date}")
         elif days_left == 0:
             msgs.append(f"🚨 Đơn **{row.get('name')}** (ID:{row.get('id')}) đến hạn **HÔM NAY** ({exp_date})")
-        elif 0 < days_left <= 7:
+        elif 0 < days_left <= REMINDER_RANGE:
             msgs.append(f"🔔 Còn **{days_left} ngày** đến hạn đơn **{row.get('name')}** (ID:{row.get('id')}) — dự kiến: {exp_date}")
-        # nếu >7 ngày thì không nhắc
+        # nếu >REMINDER_RANGE ngày thì không nhắc
 
     return msgs
 
 # -------------------------
-# UI
+# UI - ĐĂNG NHẬP (đặt CHO TOÀN APP)
+# Chèn trước phần menu chính. Khi login thành công thì app tiếp tục.
 # -------------------------
 st.set_page_config(page_title="Quản lý Đơn hàng", layout="wide")
-# ==============================
-# MAIN APP
-# ==============================
-from supabase import create_client
-
-# --- Kết nối Supabase ---
-SUPABASE_URL = "https://abcxyz.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI..."  # thay bằng của bạn
-supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 # --- Đăng nhập ---
-if "user" not in st.session_state:
+if "user" not in st.session_state or st.session_state.get("user") is None:
     st.title("🔑 Đăng nhập hệ thống")
     with st.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Mật khẩu", type="password")
         submit = st.form_submit_button("Đăng nhập")
+
     if submit:
         try:
             res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": password
             })
-            user = res.user
-            st.session_state["user"] = user
-            st.session_state["user_email"] = user.email
-            st.success(f"Đăng nhập thành công: {user.email}")
-            st.rerun()
-        except Exception:
-            st.error("Sai email hoặc mật khẩu!")
-    st.stop()  # ⛔ Dừng app nếu chưa đăng nhập
+            # res.user là object nếu thành công (supabase-py v2)
+            if getattr(res, "user", None):
+                st.session_state["user"] = res.user
+                st.session_state["user_email"] = getattr(res.user, "email", "")
+                st.success(f"Đăng nhập thành công: {st.session_state['user_email']}")
+                st.experimental_rerun()
+            else:
+                # hiển thị chi tiết để debug (không show key)
+                err = getattr(res, "error", None)
+                st.error(f"Đăng nhập thất bại. Chi tiết: {err or res}")
+        except Exception as e:
+            st.error(f"Lỗi khi đăng nhập: {e}")
+    st.stop()  # dừng app nếu chưa đăng nhập
 
 # --- Nút đăng xuất ---
 if st.button("Đăng xuất"):
     st.session_state.clear()
-    st.rerun()
+    st.experimental_rerun()
+
 
 # --- Nếu đã đăng nhập thì mới hiển thị menu ---
 st.title("📦 Quản lý đơn hàng")
