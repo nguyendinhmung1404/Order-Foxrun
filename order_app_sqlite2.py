@@ -287,8 +287,8 @@ if menu == "Thêm đơn mới":
             deposit_amount = st.number_input("Tiền đặt cọc (CNY)", min_value=0.0, value=0.0, format="%.2f")
             package_info = st.text_input("Kích thước / Cân nặng / Số kiện (nhà máy báo)", max_chars=200)
         with col2:
-            start_date = st.date_input("Ngày bắt đầu (xưởng bắt tay làm)", value=date.today())
-            first_payment_date = st.date_input("Ngày thanh toán lần đầu (nếu có)", value=None)
+            start_date = ("Ngày bắt đầu (xưởng bắt tay làm)", value=date.today())
+            first_payment_date = ("Ngày thanh toán lần đầu (nếu có)", value=None)
             production_days = st.number_input("Số ngày sản xuất", min_value=0, value=30, step=1)
             notes = st.text_area("Ghi chú", height=80)
 
@@ -337,9 +337,9 @@ elif menu == "Danh sách & Quản lý":
             df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
         col1, col2 = st.columns(2)
         with col1:
-            start_filter = st.date_input("Lọc từ ngày đặt hàng (từ)", value=(date.today() - timedelta(days=30)))
+            start_filter = ("Lọc từ ngày đặt hàng (từ)", value=(date.today() - timedelta(days=30)))
         with col2:
-            end_filter = st.date_input("Lọc đến ngày đặt hàng (đến)", value=(date.today() + timedelta(days=30)))
+            end_filter = ("Lọc đến ngày đặt hàng (đến)", value=(date.today() + timedelta(days=30)))
         mask = (df['start_date'].dt.date >= start_filter) & (df['start_date'].dt.date <= end_filter)
         filtered = df[mask].copy()
 
@@ -395,7 +395,7 @@ elif menu == "Danh sách & Quản lý":
                     start_default = start_dt.date() if pd.notna(start_dt) else date.today()
                 except Exception:
                     start_default = date.today()
-                new_start = st.date_input("Ngày bắt đầu", start_default)
+                new_start = ("Ngày bắt đầu", start_default)
                 new_lead = st.number_input("Số ngày sản xuất", min_value=0,
                                            value=int(sel_row.get("lead_time") or 0), step=1)
                 new_quantity = st.number_input("Số lượng", min_value=1.0,
@@ -447,7 +447,7 @@ elif menu == "Cập nhật / Đánh dấu giao":
         sel = st.selectbox("Chọn đơn để cập nhật ngày giao", opts)
         sel_id = int(sel.split(" - ")[0])
         default_date = date.today()
-        delivered = st.date_input("Ngày giao thực tế", default_date)
+        delivered = ("Ngày giao thực tế", default_date)
         if st.button("Xác nhận đã giao"):
             ok, msg = mark_delivered_db(sel_id, delivered.strftime("%Y-%m-%d"))
             if ok:
@@ -480,9 +480,49 @@ elif menu == "Nhắc nhở (Reminders)":
             st.download_button("📥 Tải file nhắc.xlsx", data=bytes_xlsx, file_name="reminders.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # 5) Thống kê & Xuất
-elif menu == "Thống kê & Xuất":
+elif menu == "
     st.header("📊 Thống kê tổng quan")
     df = get_orders_df()
+    # 🔹 Đặt múi giờ Việt Nam
+    from datetime import datetime, timedelta, timezone
+    VN_TZ = timezone(timedelta(hours=7))
+    today = datetime.now(VN_TZ).date()
+
+    # 🔹 Chọn khoảng thời gian lọc
+    st.subheader("📅 Lọc theo ngày đặt hàng")
+    start_date = st.date_input("Từ ngày", today - timedelta(days=30))
+    end_date = st.date_input("Đến ngày", today)
+
+    # 🔹 Đảm bảo có dữ liệu
+    if df.empty:
+        st.warning("Không có dữ liệu đơn hàng để hiển thị.")
+    else:
+        # 🔹 Chuyển cột ngày về định dạng ngày để lọc
+        if 'order_date' in df.columns:
+            df['order_date'] = pd.to_datetime(df['order_date']).dt.date
+            df_filtered = df[(df['order_date'] >= start_date) & (df['order_date'] <= end_date)]
+        elif 'created_at' in df.columns:
+            df['created_at'] = pd.to_datetime(df['created_at']).dt.date
+            df_filtered = df[(df['created_at'] >= start_date) & (df['created_at'] <= end_date)]
+        else:
+            st.error("Không tìm thấy cột ngày đặt hàng (order_date hoặc created_at) trong dữ liệu.")
+            df_filtered = df
+
+        st.write(f"📦 Tổng số đơn hàng trong khoảng thời gian: {len(df_filtered)}")
+        st.dataframe(df_filtered)
+
+        # 🔹 Nút xuất file Excel
+        if st.button("📤 Xuất file Excel"):
+            df_filtered.to_excel("thong_ke_don_hang.xlsx", index=False)
+            with open("thong_ke_don_hang.xlsx", "rb") as f:
+                st.download_button(
+                    label="Tải file Excel",
+                    data=f,
+                    file_name=f"thong_ke_don_hang_{start_date}_den_{end_date}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+
     if df.empty:
         st.info("Chưa có dữ liệu để thống kê.")
     else:
