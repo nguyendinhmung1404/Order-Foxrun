@@ -273,7 +273,7 @@ if "user" not in st.session_state:
         try:
             res = supabase.auth.sign_in_with_password(
                 {"email": email, "password": password}
-)
+            )
             user = res.user
             st.session_state["user"] = user
             st.session_state["user_email"] = user.email
