@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, date, timedelta
 from io import BytesIO
 import os
+import pytz
 
 # -------------------------
 # Helpers
@@ -514,49 +515,61 @@ elif menu == "Thống kê & Xuất":
         show_cols = [c for c in show_cols if c in df_display.columns]
         st.dataframe(df_display[show_cols], use_container_width=True)
 
-        import pytz
-from datetime import date
+                # --- Bộ lọc thời gian theo "start_date" (ngày đặt hàng) theo múi giờ Asia/Bangkok (+7) ---
+        # Chuẩn hóa cột start_date từ df (không dùng df_display vì df_display chuyển thành string)
+        df["start_date"] = pd.to_datetime(df.get("start_date"), errors="coerce")
 
-# --- Bộ lọc thời gian xuất báo cáo ---
-st.subheader("📅 Bộ lọc thời gian xuất báo cáo")
-col_from, col_to = st.columns(2)
-import pytz
-from datetime import date
-tz = pytz.timezone("Asia/Bangkok")  # ✅ Múi giờ +7
+        # Helper: chuyển timestamp (có thể tz-aware hoặc naive) -> date theo múi giờ Asia/Bangkok
+        def _to_bangkok_date(ts):
+            if pd.isna(ts):
+                return None
+            try:
+                t = pd.Timestamp(ts)
+                # nếu ts chưa có tz, giả sử lưu ở UTC => localize rồi convert
+                if t.tz is None:
+                    t = t.tz_localize("UTC")
+                # convert sang Bangkok
+                t = t.tz_convert("Asia/Bangkok")
+                return t.date()
+            except Exception:
+                try:
+                    return pd.to_datetime(ts).date()
+                except Exception:
+                    return None
 
-min_date = df["start_date"].min()
-max_date = df["start_date"].max()
-# Đảm bảo dữ liệu kiểu ngày
-df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
+        df["start_date_bk"] = df["start_date"].apply(_to_bangkok_date)
 
-start_filter = col_from.date_input(
-    "Từ ngày",
-    value=min_date.date() if pd.notna(min_date) else date.today()
-)
-end_filter = col_to.date_input(
-    "Đến ngày",
-    value=max_date.date() if pd.notna(max_date) else date.today()
-)
+        # Lấy giá trị mặc định cho date_input
+        min_date = df["start_date_bk"].min()
+        max_date = df["start_date_bk"].max()
+        if pd.isna(min_date):
+            min_date = date.today()
+        if pd.isna(max_date):
+            max_date = date.today()
 
-# Lọc dữ liệu theo khoảng thời gian
-mask = (df_display["start_date"].dt.tz_localize("UTC")
-        .dt.tz_convert(tz).dt.date >= start_filter) & \
-       (df_display["start_date"].dt.tz_localize("UTC")
-        .dt.tz_convert(tz).dt.date <= end_filter)
+        st.subheader("📅 Bộ lọc thời gian xuất báo cáo (theo ngày đặt hàng, múi giờ +7)")
+        col_from, col_to = st.columns(2)
+        start_filter = col_from.date_input("Từ ngày", value=min_date)
+        end_filter = col_to.date_input("Đến ngày", value=max_date)
 
-df_export = df_display[mask].copy()
+        # Lọc theo khoảng start_filter ≤ start_date_bk ≤ end_filter
+        mask = df["start_date_bk"].apply(lambda d: (d is not None) and (start_filter <= d <= end_filter))
+        df_export = df[mask].copy()
 
-st.info(f"📊 Đang chọn từ **{start_filter}** đến **{end_filter}** "
-        f"→ {len(df_export)} đơn hàng.")
+        # Chuẩn bị DataFrame để xuất (convert ngày thành chuỗi cho file Excel)
+        df_export_display = format_df_for_display(df_export)
 
-# --- Xuất file Excel ---
-if st.button("📥 Xuất báo cáo đã lọc"):
-    bytes_xlsx = export_df_to_excel_bytes(df_export)
-    st.download_button(
-        "📥 Tải báo cáo.xlsx",
-        data=bytes_xlsx,
-        file_name=f"bao_cao_{start_filter}_den_{end_filter}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
+        st.info(f"📊 Đang chọn từ **{start_filter}** đến **{end_filter}** → {len(df_export)} đơn hàng để xuất.")
 
+        if st.button("📥 Xuất báo cáo đã lọc"):
+            bytes_xlsx = export_df_to_excel_bytes(df_export_display)
+            st.download_button(
+                "📥 Tải báo cáo.xlsx",
+                data=bytes_xlsx,
+                file_name=f"bao_cao_{start_filter}_den_{end_filter}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        # Ghi chú cuối (cùng cấp indent)
+        st.info("Lưu ý: bạn có thể dùng tab 'Nhắc nhở' để xuất danh sách cần follow up.")
+        
