@@ -330,14 +330,14 @@ elif menu == "Danh sách & Quản lý":
     if df.empty:
         st.info("Chưa có đơn hàng.")
     else:
-        if "expected_date" in df.columns:
-            df["expected_date"] = pd.to_datetime(df["expected_date"], errors="coerce")
+        if "start_date" in df.columns:
+            df["start_date"] = pd.to_datetime(df["start_date"], errors="coerce")
         col1, col2 = st.columns(2)
         with col1:
-            start_filter = st.date_input("Lọc từ ngày dự kiến (từ)", value=(date.today() - timedelta(days=30)))
+            start_filter = st.date_input("Lọc từ ngày đặt hàng (từ)", value=(date.today() - timedelta(days=30)))
         with col2:
-            end_filter = st.date_input("Lọc đến ngày dự kiến (đến)", value=(date.today() + timedelta(days=30)))
-        mask = (df['expected_date'].dt.date >= start_filter) & (df['expected_date'].dt.date <= end_filter)
+            end_filter = st.date_input("Lọc đến ngày đặt hàng (đến)", value=(date.today() + timedelta(days=30)))
+        mask = (df['start_date'].dt.date >= start_filter) & (df['start_date'].dt.date <= end_filter)
         filtered = df[mask].copy()
 
         all_status = filtered['status'].fillna("Chưa xác định").unique().tolist()
