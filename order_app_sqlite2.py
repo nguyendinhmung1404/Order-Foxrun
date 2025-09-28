@@ -235,7 +235,7 @@ def build_reminders():
         exp_date = row.get("expected_date_only")
         if not exp_date:
             continue
-        days_left = (exp_date - today).days - 1
+        days_left = (exp_date - today).days 
 
         if days_left < 0:
             msgs.append(f"⚠️ Đơn **{row.get('name')}** (ID:{row.get('id')}) đã trễ **{-days_left} ngày** — dự kiến: {exp_date}")
